@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>OntoForge 本体工坊</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+/* Task 9 填充全部样式 */
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script id="core">
+const CORE=(()=>{
+let _seq=0;
+const uid=(p)=>p+'_'+Date.now().toString(36)+'_'+(_seq++).toString(36)+Math.random().toString(36).slice(2,6);
+const clone=(o)=>JSON.parse(JSON.stringify(o));
+const BASE_TYPES=['string','number','boolean','date','enum'];
+const RULE_OPS=['eq','neq','in','notIn','gt','lt','ge','le','contains'];
+
+function createEmptyState(){
+  return {
+    v:1,
+    meta:{ ontologyName:'未命名本体', createdAt:new Date().toISOString(), rev:0 },
+    branch:{ current:'main', list:[{name:'main', baseRev:0, status:'active', createdAt:new Date().toISOString()}] },
+    schemas:{ main:{ objectTypes:[], linkTypes:[], actionTypes:[], sharedProps:[] } },
+    proposals:[],
+    data:{ objects:[], links:[] },
+    audit:[],
+    notices:[],
+    ui:{ view:'discover', sel:null, favorites:[], recent:[] }
+  };
+}
+function schemaOf(state){ return state.schemas[state.branch.current]; }
+
+function serialize(state){ return JSON.stringify({app:'ontoforge', v:1, state}, null, 2); }
+function validateState(s){
+  const errs=[];
+  if(!s || typeof s!=='object') return ['state 不是对象'];
+  if(s.v!==1) errs.push('state.v 必须为 1');
+  if(!s.meta||typeof s.meta.ontologyName!=='string') errs.push('缺 meta.ontologyName');
+  if(!s.branch||!s.branch.current||!Array.isArray(s.branch.list)) errs.push('缺 branch 结构');
+  if(!s.schemas||typeof s.schemas!=='object') errs.push('缺 schemas');
+  else if(s.branch && !s.schemas[s.branch.current]) errs.push('当前分支无 schema: '+s.branch.current);
+  for(const k of ['objectTypes','linkTypes','actionTypes','sharedProps']){
+    if(s.schemas && s.schemas[s.branch.current] && !Array.isArray(s.schemas[s.branch.current][k])) errs.push('schema.'+k+' 非数组');
+  }
+  if(!s.data||!Array.isArray(s.data.objects)||!Array.isArray(s.data.links)) errs.push('缺 data.objects/links');
+  if(!Array.isArray(s.audit)) errs.push('audit 非数组');
+  if(!Array.isArray(s.proposals)) errs.push('proposals 非数组');
+  if(!Array.isArray(s.notices)) errs.push('notices 非数组');
+  return errs;
+}
+function deserialize(text){
+  let o; try{ o=JSON.parse(text); }catch(e){ return {ok:false,error:'JSON 解析失败: '+e.message}; }
+  if(!o||o.app!=='ontoforge') return {ok:false,error:'不是 OntoForge 导出文件'};
+  const errs=validateState(o.state);
+  if(errs.length) return {ok:false,error:errs[0],errors:errs};
+  return {ok:true,state:o.state};
+}
+
+return { uid, clone, BASE_TYPES, RULE_OPS, createEmptyState, schemaOf, serialize, validateState, deserialize };
+})();
+if(typeof globalThis!=='undefined') globalThis.CORE=CORE;
+</script>
+<script id="seed">
+/* Task 8 填充:SEED 构建(交通应急 / 空白) */
+</script>
+<script id="appjs">
+/* Task 9 起填充:STORE / 路由 / 视图 / 启动 */
+</script>
+</body>
+</html>

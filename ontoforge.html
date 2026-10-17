@@ -59,7 +59,92 @@ function deserialize(text){
   return {ok:true,state:o.state};
 }
 
-return { uid, clone, BASE_TYPES, RULE_OPS, createEmptyState, schemaOf, serialize, validateState, deserialize };
+// ── Task 2: 对象类型 / 属性 / 共享属性 CRUD ──
+const NAME_RE=/^[a-z][a-z0-9_]*$/;
+function _bump(state){ state.meta.rev++; }
+function _findType(state,id){ return schemaOf(state).objectTypes.find(t=>t.id===id); }
+
+function addObjectType(state,def){
+  const s=schemaOf(state);
+  if(!def||!NAME_RE.test(def.name||'')) return {ok:false,error:'name 需为小写字母开头的蛇形标识'};
+  if(s.objectTypes.some(t=>t.name===def.name)) return {ok:false,error:'对象类型 name 冲突: '+def.name};
+  const t={ id:uid('ot'), name:def.name, label:def.label||def.name, icon:def.icon||'📦',
+            color:def.color||'#2563eb', primaryKey:def.primaryKey||'', properties:[], sharedPropRefs:[] };
+  if(t.primaryKey) return {ok:false,error:'primaryKey 需在建属性后通过 updateObjectType 设置'};
+  s.objectTypes.push(t); _bump(state); return {ok:true,id:t.id};
+}
+function updateObjectType(state,id,patch){
+  const t=_findType(state,id); if(!t) return {ok:false,error:'对象类型不存在'};
+  for(const k of ['label','icon','color']) if(patch[k]!==undefined) t[k]=patch[k];
+  if(patch.primaryKey!==undefined){
+    if(patch.primaryKey!=='' && !t.properties.some(p=>p.name===patch.primaryKey))
+      return {ok:false,error:'primaryKey 须为已有属性 name'};
+    t.primaryKey=patch.primaryKey;
+  }
+  _bump(state); return {ok:true};
+}
+function deleteObjectType(state,id){
+  const s=schemaOf(state); const t=_findType(state,id); if(!t) return {ok:false,error:'对象类型不存在'};
+  if(state.data.objects.some(o=>o.__type===t.name)) return {ok:false,error:'存在该类型实例,不可删除'};
+  const lt=s.linkTypes.find(l=>l.from===t.name||l.to===t.name);
+  if(lt) return {ok:false,error:'被链接类型引用: '+lt.name};
+  const at=s.actionTypes.find(a=>(a.targets||[]).some(r=>r.type===t.name)||(a.edits||[]).some(e=>e.objectType===t.name));
+  if(at) return {ok:false,error:'被动作类型引用: '+at.name};
+  s.objectTypes=s.objectTypes.filter(x=>x.id!==id); _bump(state); return {ok:true};
+}
+function addProperty(state,typeId,prop){
+  const t=_findType(state,typeId); if(!t) return {ok:false,error:'对象类型不存在'};
+  if(!NAME_RE.test(prop.name||'')) return {ok:false,error:'属性 name 需为蛇形标识'};
+  if(t.properties.some(p=>p.name===prop.name)) return {ok:false,error:'属性重名: '+prop.name};
+  if(!BASE_TYPES.includes(prop.baseType)) return {ok:false,error:'非法 baseType'};
+  if(prop.baseType==='enum'&&(!Array.isArray(prop.enumValues)||!prop.enumValues.length)) return {ok:false,error:'enum 需给 enumValues'};
+  t.properties.push({ name:prop.name, label:prop.label||prop.name, baseType:prop.baseType,
+    enumValues:prop.enumValues||null, required:!!prop.required, formatting:prop.formatting||'' });
+  _bump(state); return {ok:true};
+}
+function updateProperty(state,typeId,propName,patch){
+  const t=_findType(state,typeId); if(!t) return {ok:false,error:'对象类型不存在'};
+  const p=t.properties.find(p=>p.name===propName); if(!p) return {ok:false,error:'属性不存在'};
+  if(patch.name!==undefined&&patch.name!==propName) return {ok:false,error:'不允许改属性 name'};
+  for(const k of ['label','baseType','enumValues','required','formatting']) if(patch[k]!==undefined) p[k]=patch[k];
+  if(p.baseType==='enum'&&(!Array.isArray(p.enumValues)||!p.enumValues.length)) return {ok:false,error:'enum 需给 enumValues'};
+  _bump(state); return {ok:true};
+}
+function deleteProperty(state,typeId,propName){
+  const t=_findType(state,typeId); if(!t) return {ok:false,error:'对象类型不存在'};
+  if(t.primaryKey===propName) return {ok:false,error:'不可删除主键属性'};
+  t.properties=t.properties.filter(p=>p.name!==propName); _bump(state); return {ok:true};
+}
+function addSharedProp(state,def){
+  const s=schemaOf(state);
+  if(!NAME_RE.test(def.name||'')) return {ok:false,error:'name 需为蛇形标识'};
+  if(s.sharedProps.some(p=>p.name===def.name)) return {ok:false,error:'共享属性重名'};
+  if(!BASE_TYPES.includes(def.baseType)) return {ok:false,error:'非法 baseType'};
+  const sp={ id:uid('sp'), name:def.name, label:def.label||def.name, baseType:def.baseType, enumValues:def.enumValues||null };
+  s.sharedProps.push(sp); _bump(state); return {ok:true,id:sp.id};
+}
+function attachSharedProp(state,typeId,spId){
+  const t=_findType(state,typeId); if(!t) return {ok:false,error:'对象类型不存在'};
+  if(!schemaOf(state).sharedProps.some(p=>p.id===spId)) return {ok:false,error:'共享属性不存在'};
+  if(t.sharedPropRefs.includes(spId)) return {ok:false,error:'已挂载'};
+  t.sharedPropRefs.push(spId); _bump(state); return {ok:true};
+}
+function detachSharedProp(state,typeId,spId){
+  const t=_findType(state,typeId); if(!t) return {ok:false,error:'对象类型不存在'};
+  t.sharedPropRefs=t.sharedPropRefs.filter(x=>x!==spId); _bump(state); return {ok:true};
+}
+function deleteSharedProp(state,spId){
+  const s=schemaOf(state);
+  if(!s.sharedProps.some(p=>p.id===spId)) return {ok:false,error:'共享属性不存在'};
+  const usedBy=s.objectTypes.filter(t=>(t.sharedPropRefs||[]).includes(spId)).map(t=>t.name);
+  if(usedBy.length) return {ok:false,error:'被 '+usedBy.join('、')+' 挂载中'};
+  s.sharedProps=s.sharedProps.filter(p=>p.id!==spId); _bump(state); return {ok:true};
+}
+
+return { uid, clone, BASE_TYPES, RULE_OPS, createEmptyState, schemaOf, serialize, validateState, deserialize,
+  addObjectType, updateObjectType, deleteObjectType,
+  addProperty, updateProperty, deleteProperty,
+  addSharedProp, attachSharedProp, detachSharedProp, deleteSharedProp };
 })();
 if(typeof globalThis!=='undefined') globalThis.CORE=CORE;
 </script>

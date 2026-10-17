@@ -963,12 +963,12 @@ APP.VIEWS.linkType=(el,state)=>{
     <div class="grid2">
       <div class="form-row"><label>Label</label><input id="lt-label" value="${APP.esc(lt.label||'')}"></div>
       <div class="form-row"><label>基数</label><select id="lt-card">${CORE.CARDINALITIES.map(c=>`<option ${c===lt.cardinality?'selected':''}>${c}</option>`).join('')}</select></div>
-      <div class="form-row"><label>From(源类型)</label><select id="lt-from">${names.map(x=>`<option ${x===lt.from?'selected':''}>${x}</option>`).join('')}</select></div>
-      <div class="form-row"><label>To(目标类型)</label><select id="lt-to">${names.map(x=>`<option ${x===lt.to?'selected':''}>${x}</option>`).join('')}</select></div>
+      <div class="form-row"><label>From(源类型)</label><select id="lt-from" disabled>${names.map(x=>`<option ${x===lt.from?'selected':''}>${x}</option>`).join('')}</select></div>
+      <div class="form-row"><label>To(目标类型)</label><select id="lt-to" disabled>${names.map(x=>`<option ${x===lt.to?'selected':''}>${x}</option>`).join('')}</select></div>
     </div>
     <button class="btn btn-primary" id="lt-save">保存</button>
     <button class="btn btn-danger" id="lt-del" style="margin-left:8px">删除</button>
-    <div class="mut" style="margin-top:8px">实例 ${n} 条 · 修改端点后既有实例不受影响,新增按新约束校验</div>
+    <div class="mut" style="margin-top:8px">实例 ${n} 条 · 端点(from/to)创建后不可修改</div>
   </div>
   <div class="card"><h3>Datasources(外键映射)</h3>
     <div class="grid2">
@@ -979,7 +979,7 @@ APP.VIEWS.linkType=(el,state)=>{
   </div>`;
   el.querySelector('#lt-save').onclick=()=>{
     const r=CORE.updateLinkType(state,lt.id,{label:el.querySelector('#lt-label').value,
-      cardinality:el.querySelector('#lt-card').value,from:el.querySelector('#lt-from').value,to:el.querySelector('#lt-to').value});
+      cardinality:el.querySelector('#lt-card').value});
     r.ok?(APP.store.save(),APP.render(),APP.toast('已保存')):APP.toast(r.error,'error');
   };
   el.querySelector('#lt-km-save').onclick=()=>{

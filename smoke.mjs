@@ -299,5 +299,58 @@ T('S6.4 拒绝+空 diff', ()=>{
   eq(CORE.schemaOf(s).objectTypes.length,1,'main 不变');
 });
 
+// ── S7 种子完整性 ──
+T('S7.1 结构完整性', ()=>{
+  ok(globalThis.SEED&&SEED.traffic,'SEED.traffic 存在');
+  const s=SEED.traffic();
+  const errs=CORE.validateState(s); eq(errs,[],'validateState');
+  const sch=s.schemas.main;
+  eq(sch.objectTypes.length,5,'5 对象类型');
+  eq(sch.linkTypes.length,3,'3 链接类型');
+  eq(sch.actionTypes.length,3,'3 动作类型');
+  eq(s.data.objects.length,20,'20 实例');
+  // 主键唯一
+  for(const t of sch.objectTypes){
+    const keys=CORE.objectsOfType(s,t.name).map(o=>o.props[t.primaryKey]);
+    eq(new Set(keys).size,keys.length,t.name+' 主键唯一');
+  }
+  // link 端点有效
+  for(const l of s.data.links){
+    ok(s.data.objects.some(o=>o.__id===l.from)&&s.data.objects.some(o=>o.__id===l.to),'link 端点存在');
+  }
+});
+T('S7.2 空白种子', ()=>{
+  const s=SEED.blank();
+  eq(s.schemas.main.objectTypes.length,0,'无类型'); eq(s.data.objects.length,0,'无实例');
+});
+T('S7.3 种子动作端到端:派遣+关闭', ()=>{
+  const s=SEED.traffic();
+  const sch=s.schemas.main;
+  const dispatch=sch.actionTypes.find(a=>a.name==='dispatch_team');
+  const idle=CORE.objectsOfType(s,'rescue_team').find(t=>t.props.status==='待命');
+  const open=CORE.objectsOfType(s,'incident').find(i=>i.props.status==='待处置');
+  const r1=CORE.runAction(s,dispatch.id,{params:{},targets:{team:idle.__id,inc:open.__id}});
+  ok(r1.needConfirm,'派遣需确认');
+  const r2=CORE.runAction(s,dispatch.id,{params:{},targets:{team:idle.__id,inc:open.__id},confirmed:true});
+  ok(r2.ok,r2.error);
+  const close=sch.actionTypes.find(a=>a.name==='close_incident');
+  const r3=CORE.runAction(s,close.id,{params:{},targets:{inc:open.__id},confirmed:true});
+  ok(r3.ok,'处理中事件可关闭: '+(r3.error||''));
+  eq(CORE.objectsOfType(s,'incident').find(i=>i.__id===open.__id).props.status,'已关闭','闭环完成');
+  ok(s.audit.length>=2,'审计留痕');
+});
+T('S7.4 上报事件动作', ()=>{
+  const s=SEED.traffic();
+  const sch=s.schemas.main;
+  const report=sch.actionTypes.find(a=>a.name==='report_incident');
+  const seg=CORE.objectsOfType(s,'road_segment')[0];
+  const before=CORE.objectsOfType(s,'incident').length;
+  const r=CORE.runAction(s,report.id,{params:{title:'三车追尾',type:'事故',severity:'较大'},targets:{seg:seg.__id},confirmed:true});
+  ok(r.ok,r.error);
+  eq(CORE.objectsOfType(s,'incident').length,before+1,'事件+1');
+  const inc=CORE.objectsOfType(s,'incident').find(i=>i.props.title==='三车追尾');
+  eq(CORE.linkedObjects(s,inc.__id)[0].object.__id,seg.__id,'挂到路段');
+});
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail?1:0);

@@ -352,5 +352,18 @@ T('S7.4 上报事件动作', ()=>{
   eq(CORE.linkedObjects(s,inc.__id)[0].object.__id,seg.__id,'挂到路段');
 });
 
+// ── S14 UI 骨架静态断言 ──
+T('S14.1 DOM 骨架存在', ()=>{
+  for(const id of ['topbar','sidebar','main','toasts','modal-root','global-search','branch-switch','btn-notify','notify-badge','btn-new'])
+    ok(html.includes(`id="${id}"`),'缺 #'+id);
+});
+T('S14.2 APP 基础件', ()=>{
+  const app=section('appjs');
+  for(const fn of ['store','render','go','toast','modal','esc'])
+    ok(app.includes(fn),`APP 缺 ${fn}`);
+  ok(app.includes('ontoforge.v1'),'localStorage 键');
+  ok(app.includes('VIEWS'),'视图注册表');
+});
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail?1:0);

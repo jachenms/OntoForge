@@ -5,11 +5,80 @@
 <title>OntoForge 本体工坊</title>
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <style>
-/* Task 9 填充全部样式 */
+:root{--side:#1e293b;--side-hi:#334155;--bg:#f1f5f9;--card:#fff;--ink:#0f172a;--mut:#64748b;--pri:#2563eb;--dan:#dc2626;--line:#e2e8f0}
+*{box-sizing:border-box} body{margin:0;font:14px/1.6 "PingFang SC","Microsoft YaHei",system-ui,sans-serif;color:var(--ink);background:var(--bg)}
+#topbar{height:52px;background:#fff;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:16px;padding:0 16px;position:sticky;top:0;z-index:50}
+.logo{font-weight:700;font-size:16px}.logo-sub{font-size:12px;color:var(--mut);font-weight:400}
+#global-search{flex:0 1 360px;padding:6px 12px;border:1px solid var(--line);border-radius:6px}
+.topbar-right{margin-left:auto;display:flex;gap:8px;align-items:center}
+.btn{padding:6px 12px;border:1px solid var(--line);border-radius:6px;background:#fff;cursor:pointer}
+.btn:hover{background:#f8fafc}.btn-primary{background:var(--pri);color:#fff;border-color:var(--pri)}
+.btn-danger{background:var(--dan);color:#fff;border-color:var(--dan)}
+#notify-badge{background:var(--dan);color:#fff;border-radius:9px;font-size:11px;padding:0 5px;margin-left:2px}
+#layout{display:flex;min-height:calc(100vh - 52px)}
+#sidebar{width:220px;background:var(--side);color:#cbd5e1;padding:12px 0;flex-shrink:0}
+.side-group{padding:10px 16px 4px;font-size:11px;color:#64748b;letter-spacing:1px}
+.side-item{display:block;padding:7px 16px;color:#cbd5e1;cursor:pointer;text-decoration:none;border-left:3px solid transparent}
+.side-item:hover{background:var(--side-hi)}.side-item.active{background:var(--side-hi);border-left-color:var(--pri);color:#fff}
+.side-item .cnt{float:right;font-size:11px;color:#64748b}
+#main{flex:1;padding:20px;min-width:0}
+.card{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:16px;margin-bottom:16px}
+.card h3{margin:0 0 12px;font-size:15px}
+.badge{display:inline-block;padding:1px 8px;border-radius:10px;font-size:12px;background:#e2e8f0}
+.chip{display:inline-block;padding:2px 10px;border:1px solid var(--line);border-radius:14px;margin:2px;cursor:pointer;background:#fff}
+.chip:hover{border-color:var(--pri);color:var(--pri)}
+.table{width:100%;border-collapse:collapse}.table th,.table td{padding:8px 10px;border-bottom:1px solid var(--line);text-align:left;font-size:13px}
+.table th{color:var(--mut);font-weight:600;background:#f8fafc}
+.form-row{margin-bottom:12px}.form-row label{display:block;font-size:13px;color:var(--mut);margin-bottom:4px}
+.form-row input,.form-row select,.form-row textarea{width:100%;padding:6px 10px;border:1px solid var(--line);border-radius:6px;font:inherit}
+.form-err{color:var(--dan);font-size:12px;margin-top:4px}
+#toasts{position:fixed;right:16px;bottom:16px;z-index:100}
+.toast{background:#0f172a;color:#fff;padding:10px 16px;border-radius:8px;margin-top:8px;box-shadow:0 4px 12px rgba(0,0,0,.25)}
+.toast.error{background:var(--dan)}
+.modal-mask{position:fixed;inset:0;background:rgba(15,23,42,.45);z-index:90;display:flex;align-items:center;justify-content:center}
+.modal{background:#fff;border-radius:10px;width:min(640px,92vw);max-height:86vh;overflow:auto;padding:20px}
+.modal h3{margin:0 0 14px}.modal-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:16px}
+.dropdown{position:relative}.dropdown-menu{position:absolute;right:0;top:110%;background:#fff;border:1px solid var(--line);border-radius:8px;min-width:140px;box-shadow:0 8px 24px rgba(0,0,0,.12);z-index:60}
+.dropdown-menu a{display:block;padding:8px 14px;cursor:pointer}.dropdown-menu a:hover{background:#f1f5f9}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.mut{color:var(--mut)}.mono{font-family:ui-monospace,Consolas,monospace;font-size:12px}
 </style>
 </head>
 <body>
-<div id="app"></div>
+<div id="topbar">
+  <div class="logo">OntoForge <span class="logo-sub">本体工坊</span></div>
+  <input id="global-search" placeholder="搜索对象类型 / 动作 / 实例…" />
+  <div class="topbar-right">
+    <div class="dropdown">
+      <button id="btn-new" class="btn">＋ 新建</button>
+      <div class="dropdown-menu" id="new-menu" hidden>
+        <a data-new="objectType">对象类型</a><a data-new="linkType">链接类型</a>
+        <a data-new="actionType">动作类型</a><a data-new="sharedProp">共享属性</a>
+      </div>
+    </div>
+    <select id="branch-switch" title="分支切换"></select>
+    <button id="btn-notify" class="btn">🔔<span id="notify-badge" hidden></span></button>
+  </div>
+</div>
+<div id="layout">
+  <div id="sidebar">
+    <div class="side-group">概览</div>
+    <a class="side-item" data-view="discover">✨ Discover</a>
+    <div class="side-group">语义层</div>
+    <div id="side-objectTypes"></div>
+    <a class="side-item" data-view="linkTypes">🔗 链接类型</a>
+    <a class="side-item" data-view="sharedProps">🧩 共享属性</a>
+    <div class="side-group">动力层</div>
+    <div id="side-actionTypes"></div>
+    <div class="side-group">消费与治理</div>
+    <a class="side-item" data-view="explorer">🔍 Object Explorer</a>
+    <a class="side-item" data-view="branches">🌿 分支中心</a>
+    <a class="side-item" data-view="settings">⚙️ 数据 / 导入导出</a>
+  </div>
+  <div id="main"></div>
+</div>
+<div id="toasts"></div>
+<div id="modal-root"></div>
 <script id="core">
 const CORE=(()=>{
 let _seq=0;
@@ -588,7 +657,90 @@ return { traffic, blank };
 if(typeof globalThis!=='undefined') globalThis.SEED=SEED;
 </script>
 <script id="appjs">
-/* Task 9 起填充:STORE / 路由 / 视图 / 启动 */
+const APP=(()=>{
+const LS_KEY='ontoforge.v1', LS_BAK='ontoforge.v1.bak';
+let state=null, saveTimer=null;
+const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+function load(){
+  try{ const raw=localStorage.getItem(LS_KEY);
+    if(raw){ const s=JSON.parse(raw); const errs=CORE.validateState(s); if(!errs.length) return s; } }catch(e){}
+  try{ const raw=localStorage.getItem(LS_BAK);
+    if(raw){ const s=JSON.parse(raw); const errs=CORE.validateState(s); if(!errs.length){ toast('主存档损坏,已从备份恢复','error'); return s; } } }catch(e){}
+  return SEED.traffic();
+}
+function save(){
+  clearTimeout(saveTimer);
+  saveTimer=setTimeout(()=>{
+    try{ const prev=localStorage.getItem(LS_KEY); if(prev) localStorage.setItem(LS_BAK,prev);
+      localStorage.setItem(LS_KEY,JSON.stringify(state)); }catch(e){ toast('保存失败:'+e.message,'error'); }
+  },300);
+}
+function replace(ns){ state=ns; save(); render(); }
+function reset(){ localStorage.removeItem(LS_KEY); localStorage.removeItem(LS_BAK); location.reload(); }
+
+const VIEWS={};   // 各 Task 挂视图: VIEWS.discover=(el,state)=>{...}
+function go(view,sel){ state.ui.view=view; state.ui.sel=sel||null; save(); render(); }
+function render(){
+  // 侧栏动态区
+  const sch=CORE.schemaOf(state);
+  $('#side-objectTypes').innerHTML=sch.objectTypes.map(t=>
+    `<a class="side-item" data-view="objectType" data-sel="${t.id}">${t.icon||'📦'} ${esc(t.label||t.name)}<span class="cnt">${CORE.objectsOfType(state,t.name).length}</span></a>`).join('');
+  $('#side-actionTypes').innerHTML=sch.actionTypes.map(a=>
+    `<a class="side-item" data-view="actionType" data-sel="${a.id}">⚡ ${esc(a.label||a.name)}</a>`).join('');
+  $$('.side-item').forEach(el=>{
+    el.classList.toggle('active', el.dataset.view===state.ui.view && (!el.dataset.sel||el.dataset.sel===state.ui.sel));
+    el.onclick=()=>go(el.dataset.view, el.dataset.sel||null);
+  });
+  // topbar
+  const bs=$('#branch-switch');
+  bs.innerHTML=state.branch.list.map(b=>`<option ${b.name===state.branch.current?'selected':''}>${b.name}</option>`).join('');
+  bs.onchange=()=>{ const r=CORE.switchBranch(state,bs.value); if(r.ok){save();render();toast('已切换到分支 '+bs.value);} };
+  const un=CORE.unreadNotices(state);
+  $('#notify-badge').hidden=!un; $('#notify-badge').textContent=un;
+  // 主视图
+  const main=$('#main');
+  const v=VIEWS[state.ui.view]||VIEWS.discover;
+  v(main,state);
+}
+function toast(msg,kind){
+  const t=document.createElement('div'); t.className='toast'+(kind==='error'?' error':''); t.textContent=msg;
+  $('#toasts').appendChild(t); setTimeout(()=>t.remove(),3600);
+}
+function modal({title,bodyHTML,actions}){
+  const root=$('#modal-root');
+  root.innerHTML=`<div class="modal-mask"><div class="modal"><h3>${esc(title)}</h3><div class="modal-body">${bodyHTML}</div><div class="modal-actions"></div></div></div>`;
+  const close=()=>{root.innerHTML='';};
+  root.querySelector('.modal-mask').addEventListener('click',e=>{ if(e.target.classList.contains('modal-mask')) close(); });
+  const escH=e=>{ if(e.key==='Escape'){close();document.removeEventListener('keydown',escH);} };
+  document.addEventListener('keydown',escH);
+  const bar=root.querySelector('.modal-actions');
+  (actions||[{label:'关闭'}]).forEach(a=>{
+    const b=document.createElement('button'); b.className='btn'+(a.kind?' btn-'+a.kind:''); b.textContent=a.label;
+    b.onclick=()=>{ const r=a.onClick&&a.onClick(root); if(r!==false) close(); };
+    bar.appendChild(b);
+  });
+  return close;
+}
+// 新建下拉(委托给各视图暴露的创建表单)
+function bindChrome(){
+  const nm=$('#new-menu');
+  $('#btn-new').onclick=e=>{ nm.hidden=!nm.hidden; e.stopPropagation(); };
+  document.addEventListener('click',()=>nm.hidden=true);
+  nm.querySelectorAll('a').forEach(a=>a.onclick=()=>{
+    nm.hidden=true;
+    const kind=a.dataset.new;
+    if(kind==='objectType'&&VIEWS._newObjectType) VIEWS._newObjectType();
+    if(kind==='linkType'&&VIEWS._newLinkType) VIEWS._newLinkType();
+    if(kind==='actionType'&&VIEWS._newActionType) VIEWS._newActionType();
+    if(kind==='sharedProp'&&VIEWS._newSharedProp) VIEWS._newSharedProp();
+  });
+}
+function boot(){ state=load(); bindChrome(); render(); }
+document.addEventListener('DOMContentLoaded',boot);
+return { get state(){return state;}, set state(s){state=s;}, store:{load,save,reset}, replace, go, render, toast, modal, esc, VIEWS, $, $$ };
+})();
 </script>
 </body>
 </html>

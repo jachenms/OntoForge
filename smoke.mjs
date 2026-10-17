@@ -352,6 +352,18 @@ T('S7.4 上报事件动作', ()=>{
   eq(CORE.linkedObjects(s,inc.__id)[0].object.__id,seg.__id,'挂到路段');
 });
 
+// ── S9 Discover/ObjectType/Property 静态断言 ──
+T('S9.1 视图挂载', ()=>{
+  const app=section('appjs');
+  for(const v of ['VIEWS.discover','VIEWS.objectType','VIEWS.property','_newObjectType'])
+    ok(app.includes(v),'缺 '+v);
+});
+T('S9.2 7-section 覆盖', ()=>{
+  const app=section('appjs');
+  for(const kw of ['元数据','Properties','Dependents','Data','Usage','favorite','recent'])
+    ok(app.includes(kw),'7-section 缺 '+kw);
+});
+
 // ── S14 UI 骨架静态断言 ──
 T('S14.1 DOM 骨架存在', ()=>{
   for(const id of ['topbar','sidebar','main','toasts','modal-root','global-search','branch-switch','btn-notify','notify-badge','btn-new'])

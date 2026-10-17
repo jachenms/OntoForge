@@ -741,6 +741,162 @@ function boot(){ state=load(); bindChrome(); render(); }
 document.addEventListener('DOMContentLoaded',boot);
 return { get state(){return state;}, set state(s){state=s;}, store:{load,save,reset}, replace, go, render, toast, modal, esc, VIEWS, $, $$ };
 })();
+
+// ── Discover ──
+APP.VIEWS.discover=(el,state)=>{
+  const sch=CORE.schemaOf(state);
+  const fav=state.ui.favorites, rec=state.ui.recent;
+  const card=t=>{
+    const cnt=CORE.objectsOfType(state,t.name).length;
+    const isFav=fav.includes(t.id);
+    return `<div class="card ot-card" data-id="${t.id}" style="cursor:pointer">
+      <div style="font-size:22px">${t.icon||'📦'} <b>${APP.esc(t.label||t.name)}</b>
+      <span class="fav-star" data-id="${t.id}" style="float:right;cursor:pointer">${isFav?'★':'☆'}</span></div>
+      <div class="mut mono">${t.name}</div>
+      <div style="margin-top:6px"><span class="badge">${cnt} 实例</span> <span class="badge">${t.properties.length} 属性</span></div></div>`;
+  };
+  const grid=ts=>ts.length?`<div class="grid2">${ts.map(card).join('')}</div>`:'<p class="mut">暂无</p>';
+  el.innerHTML=`<h2>Discover</h2>
+    <div class="card"><h3>⭐ 收藏</h3>${grid(sch.objectTypes.filter(t=>fav.includes(t.id)))}</div>
+    <div class="card"><h3>🕘 最近查看</h3>${grid(rec.map(id=>sch.objectTypes.find(t=>t.id===id)).filter(Boolean))}</div>
+    <div class="card"><h3>📦 全部对象类型(${sch.objectTypes.length})</h3>${grid(sch.objectTypes)}</div>`;
+  el.querySelectorAll('.ot-card').forEach(c=>c.onclick=e=>{
+    if(e.target.classList.contains('fav-star'))return;
+    APP.go('objectType',c.dataset.id);
+  });
+  el.querySelectorAll('.fav-star').forEach(s=>s.onclick=()=>{
+    const i=fav.indexOf(s.dataset.id); i>=0?fav.splice(i,1):fav.push(s.dataset.id);
+    APP.store.save(); APP.render();
+  });
+};
+
+// ── ObjectType 7-section ──
+APP.VIEWS.objectType=(el,state)=>{
+  const sch=CORE.schemaOf(state);
+  const t=sch.objectTypes.find(x=>x.id===state.ui.sel);
+  if(!t){ el.innerHTML='<p class="mut">类型不存在</p>'; return; }
+  // recent
+  state.ui.recent=[t.id,...state.ui.recent.filter(x=>x!==t.id)].slice(0,8);
+  const objs=CORE.objectsOfType(state,t.name);
+  const refActions=sch.actionTypes.filter(a=>a.targets.some(tg=>tg.type===t.name));
+  const refLinks=sch.linkTypes.filter(l=>l.from===t.name||l.to===t.name);
+  const usageN=state.audit.filter(e=>refActions.some(a=>a.id===e.actionId)).length;
+  const isFav=state.ui.favorites.includes(t.id);
+  el.innerHTML=`
+  <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px">
+    <span style="font-size:28px">${t.icon||'📦'}</span>
+    <h2 style="margin:0">${APP.esc(t.label||t.name)}</h2>
+    <span class="badge" style="background:${t.color||'#e2e8f0'}22;color:${t.color||'#475569'}">${t.name}</span>
+    <span style="margin-left:auto"></span>
+    <button class="btn" id="ot-fav">${isFav?'★ 已收藏':'☆ 收藏'}</button>
+    <button class="btn btn-danger" id="ot-del">删除类型</button>
+  </div>
+  <div class="card"><h3>① 元数据</h3>
+    <div class="grid2">
+      <div class="form-row"><label>Label</label><input id="ot-label" value="${APP.esc(t.label||'')}"></div>
+      <div class="form-row"><label>图标(emoji)</label><input id="ot-icon" value="${APP.esc(t.icon||'')}"></div>
+      <div class="form-row"><label>颜色</label><input id="ot-color" type="color" value="${t.color||'#2563eb'}"></div>
+      <div class="form-row"><label>主键属性</label><select id="ot-pk">
+        <option value="">(未设)</option>${t.properties.map(p=>`<option ${p.name===t.primaryKey?'selected':''}>${p.name}</option>`).join('')}</select></div>
+    </div>
+    <button class="btn btn-primary" id="ot-save">保存元数据</button>
+  </div>
+  <div class="card"><h3>② Properties(${t.properties.length}) <button class="btn" id="prop-add" style="float:right">＋ 新建属性</button></h3>
+    <table class="table"><tr><th>名称</th><th>Label</th><th>类型</th><th>必填</th><th>主键</th><th>共享</th></tr>
+    ${t.properties.map(p=>`<tr data-prop="${p.name}" style="cursor:pointer"><td class="mono">${p.name}</td><td>${APP.esc(p.label||'')}</td>
+      <td><span class="badge">${p.baseType}</span></td><td>${p.required?'✓':''}</td><td>${p.name===t.primaryKey?'🔑':''}</td>
+      <td>${sch.sharedProps.some(sp=>sp.name===p.name&&(t.sharedPropRefs||[]).includes(sp.id))?'🧩':''}</td></tr>`).join('')}</table></div>
+  <div class="card"><h3>③ 引用它的 Action types(${refActions.length})</h3>
+    ${refActions.map(a=>`<span class="chip" data-act="${a.id}">⚡ ${APP.esc(a.label||a.name)}</span>`).join('')||'<span class="mut">无</span>'}</div>
+  <div class="card"><h3>④ Link type 关系图</h3><div class="link-graph-slot" data-type="${t.id}"></div></div>
+  <div class="card"><h3>⑤ Dependents(删除前置检查)</h3>
+    <div class="mut">${refActions.length?`动作:${refActions.map(a=>APP.esc(a.label||a.name)).join('、')}`:'无动作依赖'} ·
+    ${refLinks.length?`链接:${refLinks.map(l=>l.name).join('、')}`:'无链接依赖'} · 实例 ${objs.length} 个</div></div>
+  <div class="card"><h3>⑥ Data(前 20 条)</h3>
+    <table class="table"><tr>${t.properties.slice(0,6).map(p=>`<th>${APP.esc(p.label||p.name)}</th>`).join('')}</tr>
+    ${objs.slice(0,20).map(o=>`<tr data-obj="${o.__id}" style="cursor:pointer">${t.properties.slice(0,6).map(p=>`<td>${APP.esc(o.props[p.name]??'')}</td>`).join('')}</tr>`).join('')||'<tr><td class="mut">无实例</td></tr>'}</table></div>
+  <div class="card"><h3>⑦ Usage</h3><div class="mut">相关动作累计执行 <b>${usageN}</b> 次(全分支审计)</div></div>`;
+  // 绑定
+  el.querySelector('#ot-fav').onclick=()=>{ const f=state.ui.favorites,i=f.indexOf(t.id); i>=0?f.splice(i,1):f.push(t.id); APP.store.save(); APP.render(); };
+  el.querySelector('#ot-save').onclick=()=>{
+    const r=CORE.updateObjectType(state,t.id,{label:el.querySelector('#ot-label').value,icon:el.querySelector('#ot-icon').value,color:el.querySelector('#ot-color').value,primaryKey:el.querySelector('#ot-pk').value||null});
+    r.ok?(APP.store.save(),APP.render(),APP.toast('已保存')):APP.toast(r.error,'error');
+  };
+  el.querySelector('#ot-del').onclick=()=>{
+    APP.modal({title:'删除对象类型',bodyHTML:`<p>确定删除 <b>${APP.esc(t.label||t.name)}</b>?有依赖时将被拒绝。</p>`,actions:[
+      {label:'取消'},{label:'删除',kind:'danger',onClick:()=>{ const r=CORE.deleteObjectType(state,t.id);
+        r.ok?(APP.store.save(),APP.go('discover'),APP.toast('已删除')):APP.toast(r.error,'error'); }}]});
+  };
+  el.querySelector('#prop-add').onclick=()=>APP.go('property',{typeId:t.id,propName:null});
+  el.querySelectorAll('[data-prop]').forEach(r=>r.onclick=()=>APP.go('property',{typeId:t.id,propName:r.dataset.prop}));
+  el.querySelectorAll('[data-act]').forEach(c=>c.onclick=()=>APP.go('actionType',c.dataset.act));
+  el.querySelectorAll('[data-obj]').forEach(r=>r.onclick=()=>APP.go('objectView',{typeName:t.name,objectId:r.dataset.obj}));
+  if(APP.renderLinkGraph) APP.renderLinkGraph(el.querySelector('.link-graph-slot'),state,t.id);
+};
+
+// ── Property 编辑器 ──
+APP.VIEWS.property=(el,state)=>{
+  const {typeId,propName}=state.ui.sel||{};
+  const t=CORE.schemaOf(state).objectTypes.find(x=>x.id===typeId);
+  if(!t){ el.innerHTML='<p class="mut">类型不存在</p>'; return; }
+  const p=propName?t.properties.find(x=>x.name===propName):null;
+  const isNew=!p;
+  el.innerHTML=`<h2><a style="cursor:pointer;color:var(--pri)" id="back">${APP.esc(t.label||t.name)}</a> / ${isNew?'新建属性':APP.esc(p.label||p.name)}</h2>
+  <div class="card"><h3>${isNew?'新建属性':'编辑属性'}</h3>
+    <div class="grid2">
+      <div class="form-row"><label>名称(小写 snake)</label><input id="p-name" ${isNew?'':'disabled'} value="${APP.esc(p?.name||'')}" placeholder="如 severity"></div>
+      <div class="form-row"><label>Label</label><input id="p-label" value="${APP.esc(p?.label||'')}"></div>
+      <div class="form-row"><label>基础类型${isNew?'':'(不可改)'}</label><select id="p-bt" ${isNew?'':'disabled'}>
+        ${CORE.BASE_TYPES.map(b=>`<option ${p?.baseType===b?'selected':''}>${b}</option>`).join('')}</select></div>
+      <div class="form-row"><label>必填</label><select id="p-req"><option value="">否</option><option value="1" ${p?.required?'selected':''}>是</option></select></div>
+    </div>
+    <div class="form-row" id="p-enum-row" hidden><label>枚举值(逗号分隔)</label><input id="p-enum" value="${APP.esc((p?.enumValues||[]).join(','))}"></div>
+    <div class="form-err" id="p-err"></div>
+    <button class="btn btn-primary" id="p-save">${isNew?'创建':'保存'}</button>
+    ${isNew?'':'<button class="btn btn-danger" id="p-del" style="margin-left:8px">删除属性</button>'}
+  </div>
+  ${isNew?'':`<div class="card"><h3>共享属性</h3>
+    <div class="mut">挂载共享属性可跨类型复用同一属性定义。</div>
+    ${(CORE.schemaOf(state).sharedProps||[]).map(sp=>{
+      const on=(t.sharedPropRefs||[]).includes(sp.id);
+      return `<span class="chip" data-sp="${sp.id}">${on?'✓ ':''}🧩 ${APP.esc(sp.label||sp.name)}</span>`;}).join('')||'<span class="mut">尚无共享属性定义</span>'}
+  </div>`}`;
+  const syncEnum=()=>{ el.querySelector('#p-enum-row').hidden=el.querySelector('#p-bt').value!=='enum'; };
+  el.querySelector('#p-bt').onchange=syncEnum; syncEnum();
+  el.querySelector('#back').onclick=()=>APP.go('objectType',t.id);
+  el.querySelector('#p-save').onclick=()=>{
+    const bt=el.querySelector('#p-bt').value;
+    const payload={ label:el.querySelector('#p-label').value, baseType:bt, required:el.querySelector('#p-req').value==='1',
+      enumValues:bt==='enum'?el.querySelector('#p-enum').value.split(',').map(s=>s.trim()).filter(Boolean):null };
+    const r=isNew?CORE.addProperty(state,t.id,{name:el.querySelector('#p-name').value.trim(),...payload})
+                 :CORE.updateProperty(state,t.id,p.name,payload);
+    if(r.ok){ APP.store.save(); APP.go('objectType',t.id); APP.toast('已保存'); }
+    else el.querySelector('#p-err').textContent=r.error;
+  };
+  const del=el.querySelector('#p-del');
+  if(del) del.onclick=()=>{ const r=CORE.deleteProperty(state,t.id,p.name);
+    r.ok?(APP.store.save(),APP.go('objectType',t.id),APP.toast('已删除')):APP.toast(r.error,'error'); };
+  el.querySelectorAll('[data-sp]').forEach(c=>c.onclick=()=>{
+    const on=(t.sharedPropRefs||[]).includes(c.dataset.sp);
+    const r=on?CORE.detachSharedProp(state,t.id,c.dataset.sp):CORE.attachSharedProp(state,t.id,c.dataset.sp);
+    r.ok?(APP.store.save(),APP.render()):APP.toast(r.error,'error');
+  });
+};
+
+// ── 新建对象类型(顶栏 ＋新建)──
+APP.VIEWS._newObjectType=()=>{
+  APP.modal({title:'新建对象类型',bodyHTML:`
+    <div class="form-row"><label>名称(小写 snake,如 sensor)</label><input id="n-name"></div>
+    <div class="form-row"><label>Label</label><input id="n-label"></div>
+    <div class="form-row"><label>图标 emoji</label><input id="n-icon" value="📦"></div>
+    <div class="form-err" id="n-err"></div>`,actions:[
+    {label:'取消'},{label:'创建',kind:'primary',onClick:root=>{
+      const r=CORE.addObjectType(APP.state,{name:root.querySelector('#n-name').value.trim(),
+        label:root.querySelector('#n-label').value,icon:root.querySelector('#n-icon').value});
+      if(!r.ok){ root.querySelector('#n-err').textContent=r.error; return false; }
+      APP.store.save(); APP.go('objectType',r.id); APP.toast('类型已创建');
+    }}]});
+};
 </script>
 </body>
 </html>

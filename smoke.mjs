@@ -394,5 +394,12 @@ T('S11.1 视图挂载', ()=>{
   ok(app.includes('usageByDay'),'用量柱状数据源');
 });
 
+// ── S12 Explorer/ObjectView 静态断言 ──
+T('S12.1 视图挂载', ()=>{
+  const app=section('appjs');
+  for(const v of ['VIEWS.explorer','VIEWS.objectView','linkedObjects','添加链接','编辑历史','可用动作'])
+    ok(app.includes(v),'缺 '+v);
+});
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail?1:0);

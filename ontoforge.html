@@ -1238,6 +1238,133 @@ APP.VIEWS._newActionType=()=>{
       APP.store.save(); APP.go('actionType',r.id); APP.toast('动作已创建,请在 Logic 页配置');
     }}]});
 };
+
+// ── Object Explorer ──
+APP.VIEWS.explorer=(el,state)=>{
+  const sch=CORE.schemaOf(state);
+  const selType=state.ui.sel?.typeName||sch.objectTypes[0]?.name||null;
+  const q=state.ui.sel?.q||'';
+  const t=sch.objectTypes.find(x=>x.name===selType);
+  const results=t?CORE.searchObjects(state,selType,q):[];
+  el.innerHTML=`<h2>🔍 Object Explorer</h2>
+  <div style="display:grid;grid-template-columns:200px 1fr;gap:16px">
+    <div class="card" style="margin:0"><h3>类型</h3>
+      ${sch.objectTypes.map(x=>`<a class="side-item" data-type="${x.name}" style="color:var(--ink);${x.name===selType?'background:#dbeafe;border-radius:6px':''}">
+        ${x.icon||'📦'} ${APP.esc(x.label||x.name)}<span class="cnt">${CORE.objectsOfType(state,x.name).length}</span></a>`).join('')||'<span class="mut">无类型</span>'}
+    </div>
+    <div class="card" style="margin:0">
+      <input id="ex-q" placeholder="搜索 ${APP.esc(t?.label||'')} 实例…" value="${APP.esc(q)}" style="width:100%;padding:8px 12px;border:1px solid var(--line);border-radius:6px;margin-bottom:12px">
+      ${t?`<table class="table"><tr>${t.properties.slice(0,5).map(p=>`<th>${APP.esc(p.label||p.name)}</th>`).join('')}</tr>
+        ${results.slice(0,50).map(o=>`<tr data-obj="${o.__id}" style="cursor:pointer">${t.properties.slice(0,5).map(p=>`<td>${APP.esc(o.props[p.name]??'')}</td>`).join('')}</tr>`).join('')||'<tr><td class="mut">无匹配实例</td></tr>'}</table>
+        <div class="mut" style="margin-top:6px">${results.length} 条结果${results.length>50?'(仅显示前 50)':''}</div>`:'<p class="mut">请先创建对象类型</p>'}
+    </div>
+  </div>`;
+  el.querySelectorAll('[data-type]').forEach(a=>a.onclick=()=>APP.go('explorer',{typeName:a.dataset.type,q:''}));
+  const qi=el.querySelector('#ex-q');
+  if(qi){ qi.oninput=()=>{ state.ui.sel={typeName:selType,q:qi.value}; APP.store.save();
+      clearTimeout(APP._exT); APP._exT=setTimeout(()=>{ APP.render(); const nq=document.querySelector('#ex-q'); if(nq){nq.focus();nq.setSelectionRange(nq.value.length,nq.value.length);} },250); };
+    if(q){ qi.focus(); qi.setSelectionRange(q.length,q.length); } }
+  el.querySelectorAll('[data-obj]').forEach(r=>r.onclick=()=>APP.go('objectView',{typeName:selType,objectId:r.dataset.obj}));
+};
+
+// ── Object View ──
+APP.VIEWS.objectView=(el,state)=>{
+  const {typeName,objectId}=state.ui.sel||{};
+  const sch=CORE.schemaOf(state);
+  const t=sch.objectTypes.find(x=>x.name===typeName);
+  const o=state.data.objects.find(x=>x.__id===objectId);
+  if(!t||!o){ el.innerHTML='<p class="mut">对象不存在</p>'; return; }
+  const linked=CORE.linkedObjects(state,objectId);
+  const history=CORE.auditFor(state,{objectId}).slice(-10).reverse();
+  const availActions=sch.actionTypes.filter(a=>a.targets.some(tg=>tg.type===typeName));
+  el.innerHTML=`
+  <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+    <a style="cursor:pointer;color:var(--pri)" id="ov-back">← Explorer</a>
+    <span style="font-size:22px">${t.icon||'📦'}</span>
+    <h2 style="margin:0">${APP.esc(CORE.objectLabel(state,o))}</h2>
+    <span class="badge mono">${o.__id}</span>
+  </div>
+  <div class="grid2">
+    <div>
+      <div class="card"><h3>属性</h3>
+        <table class="table">${t.properties.map(p=>`<tr><td class="mut">${APP.esc(p.label||p.name)}${p.name===t.primaryKey?' 🔑':''}</td>
+          <td>${APP.esc(o.props[p.name]??'—')}</td></tr>`).join('')}</table></div>
+      <div class="card"><h3>可用动作</h3>
+        ${availActions.map(a=>{
+          const role=a.targets.find(tg=>tg.type===typeName).role;
+          return `<button class="btn btn-primary" data-act="${a.id}" data-role="${role}" style="margin:2px">▶ ${APP.esc(a.label||a.name)}</button>`;
+        }).join('')||'<span class="mut">无适用动作</span>'}</div>
+      <div class="card"><h3>编辑历史</h3>
+        ${history.map(e=>`<div style="border-bottom:1px solid var(--line);padding:6px 0">
+          <span class="mut mono">${e.ts.replace('T',' ').slice(0,19)}</span> · ${APP.esc(e.summary)}
+          <div class="mut mono" style="font-size:11px">${e.diff.map(APP.esc).join('<br>')}</div></div>`).join('')||'<span class="mut">暂无历史</span>'}</div>
+    </div>
+    <div>
+      <div class="card"><h3>链接对象(${linked.length})</h3>
+        ${linked.map((l,i)=>`<div style="margin-bottom:6px">
+          <span class="badge">${APP.esc(l.linkType.label||l.linkType.name)} ${l.direction==='out'?'→':'←'}</span>
+          <span class="chip" data-linked="${l.object.__id}" data-ltype="${l.object.__type}">${APP.esc(CORE.objectLabel(state,l.object))}</span>
+          <a data-unlink="${i}" style="cursor:pointer;color:var(--dan);font-size:12px">✕ 解除</a></div>`).join('')||'<span class="mut">无链接</span>'}
+      </div>
+      <div class="card"><h3>添加链接</h3>
+        <div class="form-row"><label>链接类型</label><select id="ov-lt">
+          ${sch.linkTypes.filter(l=>l.from===typeName||l.to===typeName).map(l=>`<option value="${l.id}">${APP.esc(l.label||l.name)}(${l.from}→${l.to})</option>`).join('')}
+        </select></div>
+        <div class="form-row"><label>对端对象</label><select id="ov-peer"></select></div>
+        <button class="btn btn-primary" id="ov-link">建立链接</button>
+        <div class="form-err" id="ov-lerr"></div>
+      </div>
+    </div>
+  </div>`;
+  el.querySelector('#ov-back').onclick=()=>APP.go('explorer',{typeName,q:''});
+  el.querySelectorAll('[data-linked]').forEach(c=>c.onclick=()=>APP.go('objectView',{typeName:c.dataset.ltype,objectId:c.dataset.linked}));
+  el.querySelectorAll('[data-unlink]').forEach(a=>a.onclick=()=>{
+    const l=linked[+a.dataset.unlink];
+    APP.modal({title:'解除链接',bodyHTML:`确认解除与 <b>${APP.esc(CORE.objectLabel(state,l.object))}</b> 的链接?`,actions:[
+      {label:'取消'},{label:'解除',kind:'danger',onClick:()=>{
+        const lt=l.linkType;
+        const from=l.direction==='out'?objectId:l.object.__id, to=l.direction==='out'?l.object.__id:objectId;
+        const link=state.data.links.find(x=>x.__type===lt.id&&x.from===from&&x.to===to);
+        const r=link?CORE.deleteLink(state,link.__id):{ok:false,error:'链接不存在'};
+        r.ok?(APP.store.save(),APP.render(),APP.toast('已解除')):APP.toast(r.error,'error');
+      }}]});
+  });
+  const syncPeer=()=>{
+    const ltId=el.querySelector('#ov-lt').value;
+    const lt=sch.linkTypes.find(x=>x.id===ltId); if(!lt){ el.querySelector('#ov-peer').innerHTML=''; return; }
+    const peerType=lt.from===typeName?lt.to:lt.from;
+    el.querySelector('#ov-peer').innerHTML=CORE.objectsOfType(state,peerType)
+      .filter(p=>p.__id!==objectId)
+      .map(p=>`<option value="${p.__id}">${APP.esc(CORE.objectLabel(state,p))}</option>`).join('');
+  };
+  el.querySelector('#ov-lt').onchange=syncPeer; syncPeer();
+  el.querySelector('#ov-link').onclick=()=>{
+    const ltId=el.querySelector('#ov-lt').value, peer=el.querySelector('#ov-peer').value;
+    const lt=sch.linkTypes.find(x=>x.id===ltId); if(!lt||!peer) return;
+    const from=lt.from===typeName?objectId:peer, to=lt.from===typeName?peer:objectId;
+    const r=CORE.createLink(state,ltId,from,to);
+    r.ok?(APP.store.save(),APP.render(),APP.toast('链接已建立')):el.querySelector('#ov-lerr').textContent=r.error;
+  };
+  el.querySelectorAll('[data-act]').forEach(b=>b.onclick=()=>APP.openRunAction(b.dataset.act,{[b.dataset.role]:objectId}));
+};
+
+// ── 全局搜索(topbar)──
+document.addEventListener('DOMContentLoaded',()=>{
+  const gs=document.querySelector('#global-search');
+  gs.addEventListener('keydown',e=>{
+    if(e.key!=='Enter'||!gs.value.trim()) return;
+    const state=APP.state, sch=CORE.schemaOf(state), q=gs.value.trim().toLowerCase();
+    const t=sch.objectTypes.find(t=>(t.label||'').toLowerCase().includes(q)||t.name.includes(q));
+    if(t){ APP.go('objectType',t.id); return; }
+    const a=sch.actionTypes.find(a=>(a.label||'').toLowerCase().includes(q)||a.name.includes(q));
+    if(a){ APP.go('actionType',a.id); return; }
+    for(const t of sch.objectTypes){
+      const hit=CORE.searchObjects(state,t.name,gs.value.trim())[0];
+      if(hit){ APP.go('objectView',{typeName:t.name,objectId:hit.__id}); return; }
+    }
+    APP.toast('未找到匹配: '+gs.value,'error');
+  });
+});
 </script>
 </body>
 </html>

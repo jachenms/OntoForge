@@ -428,6 +428,56 @@ function usageByDay(state,actionId,days){
 function unreadNotices(state){ return state.notices.filter(n=>!n.read).length; }
 function markNoticesRead(state){ state.notices.forEach(n=>n.read=true); }
 
+// ── Task 7: 分支 / diff / 提案合并(仅隔离 schema,实例数据全局) ──
+function createBranch(state,name){
+  if(!/^[a-z][a-z0-9-]*$/.test(name||'')) return {ok:false,error:'分支名需为小写字母/数字/连字符'};
+  if(state.schemas[name]) return {ok:false,error:'分支已存在'};
+  state.schemas[name]=clone(state.schemas.main);
+  state.branch.list.push({name, baseRev:state.meta.rev, status:'active', createdAt:new Date().toISOString()});
+  state.branch.current=name; return {ok:true};
+}
+function switchBranch(state,name){
+  if(!state.schemas[name]) return {ok:false,error:'分支不存在'};
+  state.branch.current=name; return {ok:true};
+}
+function _diffColl(a,b){
+  const added=b.filter(x=>!a.some(y=>y.name===x.name));
+  const removed=a.filter(x=>!b.some(y=>y.name===x.name));
+  const changed=[];
+  for(const y of b){ const x=a.find(z=>z.name===y.name);
+    if(x){ const strip=o=>{const c=clone(o); delete c.id; return JSON.stringify(c); };
+      if(strip(x)!==strip(y)) changed.push({name:y.name,before:x,after:y}); } }
+  return {added,removed,changed};
+}
+function diffSchemas(a,b){
+  return { objectTypes:_diffColl(a.objectTypes,b.objectTypes), linkTypes:_diffColl(a.linkTypes,b.linkTypes),
+           actionTypes:_diffColl(a.actionTypes,b.actionTypes), sharedProps:_diffColl(a.sharedProps,b.sharedProps) };
+}
+function diffEmpty(d){
+  return Object.values(d).every(c=>!c.added.length&&!c.removed.length&&!c.changed.length);
+}
+function proposeMerge(state,branchName){
+  if(state.branch.current!=='main') return {ok:false,error:'请在 main 分支发起提案'};
+  if(!state.schemas[branchName]) return {ok:false,error:'分支不存在'};
+  if(branchName==='main') return {ok:false,error:'main 无需提案'};
+  if(state.proposals.some(p=>p.branch===branchName&&p.status==='open')) return {ok:false,error:'该分支已有待审提案'};
+  const diff=diffSchemas(state.schemas.main,state.schemas[branchName]);
+  if(diffEmpty(diff)) return {ok:false,error:'无变更'};
+  const p={ id:uid('pr'), branch:branchName, diff, status:'open', createdAt:new Date().toISOString() };
+  state.proposals.push(p); return {ok:true,proposalId:p.id};
+}
+function mergeProposal(state,proposalId){
+  const p=state.proposals.find(x=>x.id===proposalId); if(!p||p.status!=='open') return {ok:false,error:'提案不存在或已处理'};
+  state.schemas.main=clone(state.schemas[p.branch]); _bump(state);
+  p.status='merged'; p.mergedAt=new Date().toISOString();
+  const b=state.branch.list.find(x=>x.name===p.branch); if(b) b.status='merged';
+  return {ok:true};
+}
+function rejectProposal(state,proposalId){
+  const p=state.proposals.find(x=>x.id===proposalId); if(!p||p.status!=='open') return {ok:false,error:'提案不存在或已处理'};
+  p.status='rejected'; p.rejectedAt=new Date().toISOString(); return {ok:true};
+}
+
 return { uid, clone, BASE_TYPES, RULE_OPS, CARDINALITIES, EDIT_OPS, createEmptyState, schemaOf, serialize, validateState, deserialize,
   addObjectType, updateObjectType, deleteObjectType,
   addProperty, updateProperty, deleteProperty,
@@ -436,7 +486,8 @@ return { uid, clone, BASE_TYPES, RULE_OPS, CARDINALITIES, EDIT_OPS, createEmptyS
   createLink, deleteLink, linksOf,
   addActionType, updateActionType, deleteActionType, renderTemplate,
   runAction, describeEdits,
-  objectsOfType, objectLabel, searchObjects, linkedObjects, auditFor, usageByDay, unreadNotices, markNoticesRead };
+  objectsOfType, objectLabel, searchObjects, linkedObjects, auditFor, usageByDay, unreadNotices, markNoticesRead,
+  createBranch, switchBranch, diffSchemas, diffEmpty, proposeMerge, mergeProposal, rejectProposal };
 })();
 if(typeof globalThis!=='undefined') globalThis.CORE=CORE;
 </script>

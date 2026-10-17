@@ -249,5 +249,55 @@ T('S5.4 审计过滤与用量柱状', ()=>{
   eq(CORE.unreadNotices(s),0,'无通知');
 });
 
+// ── S6 分支/diff/合并 ──
+T('S6.1 建分支+隔离 schema', ()=>{
+  const s=CORE.createEmptyState();
+  CORE.addObjectType(s,{name:'seg'});
+  ok(CORE.createBranch(s,'feature-x').ok,'建分支');
+  eq(s.branch.current,'feature-x','切到新分支');
+  CORE.addObjectType(s,{name:'tunnel'});          // 分支上加类型
+  eq(CORE.schemaOf(s).objectTypes.length,2,'分支 2 类');
+  CORE.switchBranch(s,'main');
+  eq(CORE.schemaOf(s).objectTypes.length,1,'main 仍 1 类(隔离)');
+});
+T('S6.2 diff 三类变更', ()=>{
+  const s=CORE.createEmptyState();
+  CORE.addObjectType(s,{name:'seg',label:'路段'});
+  CORE.createBranch(s,'b1');
+  CORE.addObjectType(s,{name:'tunnel'});
+  const tid=CORE.schemaOf(s).objectTypes.find(t=>t.name==='seg').id;
+  CORE.updateObjectType(s,tid,{label:'路段v2'});
+  CORE.switchBranch(s,'main');
+  CORE.addObjectType(s,{name:'temp_del'});
+  // 注意:diff 是 main→branch;temp_del 在 branch 不存在 → removed
+  const d=CORE.diffSchemas(s.schemas.main,s.schemas['b1']);
+  ok(d.objectTypes.added.some(t=>t.name==='tunnel'),'added 含 tunnel');
+  ok(d.objectTypes.changed.some(c=>c.name==='seg'),'changed 含 seg');
+  ok(!CORE.diffEmpty(d),'非空 diff');
+});
+T('S6.3 提案→合并', ()=>{
+  const s=CORE.createEmptyState();
+  CORE.addObjectType(s,{name:'seg'});
+  CORE.createBranch(s,'b1'); CORE.addObjectType(s,{name:'tunnel'});
+  CORE.switchBranch(s,'main');
+  const p=CORE.proposeMerge(s,'b1');
+  ok(p.ok,p.error);
+  ok(!CORE.proposeMerge(s,'b1').ok,'重复 open 提案拒绝');
+  ok(CORE.mergeProposal(s,p.proposalId).ok,'合并');
+  eq(CORE.schemaOf(s).objectTypes.length,2,'main 拿到 tunnel');
+  eq(s.proposals[0].status,'merged','提案状态');
+});
+T('S6.4 拒绝+空 diff', ()=>{
+  const s=CORE.createEmptyState();
+  CORE.addObjectType(s,{name:'seg'});
+  CORE.createBranch(s,'b2'); CORE.switchBranch(s,'main');
+  ok(!CORE.proposeMerge(s,'b2').ok,'无变更提案拒绝');
+  CORE.switchBranch(s,'b2'); CORE.addObjectType(s,{name:'x'}); CORE.switchBranch(s,'main');
+  const p=CORE.proposeMerge(s,'b2');
+  ok(CORE.rejectProposal(s,p.proposalId).ok,'拒绝');
+  eq(s.proposals[0].status,'rejected');
+  eq(CORE.schemaOf(s).objectTypes.length,1,'main 不变');
+});
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail?1:0);

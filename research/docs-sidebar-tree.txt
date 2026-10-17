@@ -1,0 +1,405 @@
+Statuses
+Object type groups
+Add Ontology types to a Marketplace product
+Action types
+Overview
+Getting started
+Explore other action types
+Use actions in the platform
+Test run
+Rules
+Parameters
+Overview
+Set parameter default value
+Filter results of a parameter dropdown
+Object dropdown security considerations
+Override parameter configurations
+Performance considerations
+Submission criteria
+Actions on interfaces
+Actions on structs
+Function-backed actions
+Overview
+Getting started
+Batched execution
+Side effects
+Overview
+Notifications
+Set up a notification
+Webhooks
+Set up a webhook
+Trigger schedule build
+Configure sections
+Upload media
+Upload attachments
+Scale and property limits
+Inline edits
+Permissions
+Read and write authorizations
+Consistency and isolation
+Monitoring
+Undo or revert Actions
+Branching action types
+Action metrics
+Action log
+Add action types to a Marketplace product
+Functions
+Overview
+Feature support by language
+Getting started
+Types reference
+Branching functions
+Navigating VS Code
+Function management
+Function versioning
+Manage published functions
+Functions in Marketplace
+Function monitoring
+Instrumentation and telemetry
+Permissions
+Function consumption
+Use functions in the platform
+Function metrics
+Optimize performance
+Version range dependencies
+Language-agnostic features
+Ontology edits
+Publish and call query functions through API gateway
+Configure notifications
+Make API calls from functions
+Use platform APIs with the Foundry platform SDK
+Deploy functions
+User-facing errors
+Streaming functions
+Functions settings
+TypeScript v2
+Getting started
+Local Ontology SDKs
+Migrate from TypeScript v1 to TypeScript v2
+Ontology edits
+Staged writes
+Python
+Getting started
+Local Ontology SDKs
+Functions on objects
+Create a custom aggregation
+Ontology edits
+Staged writes
+Use Python functions in Pipeline Builder
+Use Python functions in Workshop
+Local development
+TypeScript v1
+Getting started
+Decorators
+Ontology edits
+Generate unique IDs for new objects
+Error types
+Handle undefined values
+Debug functions
+Import resources into Code Repositories
+Add NPM dependencies
+Use webhooks
+Functions on objects
+Overview
+Getting started
+Object identifiers
+Create a custom aggregation (TSv1)
+Import object, interface, and link types
+Objects and links (TSv1)
+Object sets (TSv1)
+Attachments
+Media
+Models
+Functions on models
+Function interfaces
+Language models in TypeScript v2 and Python functions
+Language models in TypeScript v1 functions
+Legacy language models in functions
+Aliases
+Custom aliases
+Model aliases
+Source aliases
+Unit testing (TSv1)
+Getting started
+Create stub objects
+Verify Ontology edits
+Stub object searches and aggregations
+Mock dates, timestamps, and UUIDs
+Mock users and groups
+Debug
+Interfaces
+Overview
+Create an interface
+Implement an interface
+Edit an interface definition
+Edit an interface implementation
+Interface link types
+Interface action type constraints
+Extend an interface
+Metadata reference
+Ontology design: Best practices
+Ontology design: Structural guidance
+Ontology design: Anti-patterns
+Ontology design: Validation
+Ontology search
+Semantic search
+Overview
+Document processing
+Choose multimodal and embedding models
+Ontology augmented generation
+Use Palantir-provided models to create a semantic search workflow
+Use custom models to create a semantic search workflow
+Search syntax
+Derived properties
+Derived properties reference
+Ontology scenarios
+Overview
+Temporary scenarios
+Store scenario metadata as objects
+Merge scenarios
+Use scenarios with OSDK
+Applications
+Object Explorer
+Overview
+Getting started
+Search and explore objects
+Search for objects
+Search syntax
+Understanding text search
+Analyze using SQL
+Analyze and compare
+Filter results
+Explore with charts
+View results
+Pivot to explore linked objects
+Compare object sets
+Save explorations
+Save lists
+Apply Actions
+Generate Object Explorer URLs
+Configure Object Explorer
+Object Monitors [Sunset]
+Overview
+Create a new object monitor
+Core concepts
+Monitors
+Inputs
+Conditions
+Evaluation
+Activity
+Notifications
+Actions
+Monitoring limits
+Error reference
+Object Views
+Overview
+Standard Object Views
+Manage configured Object View versions
+Configured Object View overview
+Branching object views
+Full Object Views
+Use full Object Views in the platform
+Configure full Object Views
+Panel Object Views
+Use panel Object Views in the platform
+Configure panel Object Views
+Legacy Object Views
+Configure legacy Object Views
+Configure tabs
+Configure the applications sidebar
+Configure profiles
+Properties and Links
+Visualization
+Filtering
+Layout
+Apps and Files
+Generate Object View URLs
+Comment on objects
+Add Object Views to a Marketplace product
+Ontology Manager
+Overview
+Navigation
+Viewing usage
+Migrate to project-based permissions
+Ontology roles migration [Legacy]
+Change management
+Save changes to the Ontology
+Review and restore changes
+Export, edit, and import an Ontology
+Ontology cleanup
+Vertex
+Overview
+Example use cases
+Graphs
+Explore existing graphs
+Explore object relationships
+Object and edge display options
+Save, share, and collaborate
+Create a graph template
+Generate a graph from other applications
+Generate graphs using Functions
+Derive properties using Functions
+Embed a graph in a Workshop module
+Read-only mode
+Media layers and image annotations
+Events and time series
+Overview
+Configure events
+Explore related events
+Explore related time series
+Use time selection
+Configure thresholds
+View and filter events on a timeline
+Scenarios
+Overview
+Getting started
+Scenario options
+Configure chained models [Sunset]
+Configuration
+Configure settings in Control Panel
+Configure link merging
+Add Vertex graph templates to a Marketplace product
+Machinery
+Overview
+Core concepts
+Draw a graph
+Connect data to Machinery
+Process mining
+Analyze and monitor a process
+Foundry Rules
+Overview
+Core concepts
+Overview
+Object model
+Workshop application
+Rule logic
+Foundry Rules workflow configuration
+Deploy
+Overview
+Deploy workflow
+Configure workflow
+Author and run a rule
+Settings & customization
+Overview
+Enable optional features
+Add a custom property
+Permissions for editing rules
+Permitted and default output values
+Customize Foundry Rules pipeline
+Time series
+Time series rules [Sunset]
+Deploy time series Foundry Rules
+Legacy Foundry Rules setup (Taurus)
+Overview
+Migrate to Foundry Rules
+Configure Workshop application
+Configure transforms pipeline
+Configure rule Actions
+Configure time series for Foundry Rules
+Upgrade to use rule Actions
+Troubleshooting reference
+Add Foundry Rules to a Marketplace product
+Map
+Overview
+Getting started
+Core concepts
+Interact with maps
+Map interface overview
+Create and save maps
+Add data to a map
+Layer management
+Navigation
+Selection
+Annotations
+Shapes
+Histogram and filtering
+Actions
+Time
+Overview
+Time selection
+Timeline
+Events
+Time series
+Series panel [Planned deprecation]
+Visualize Ontology data
+Overview
+Points (icons and circles)
+Lines and polygons
+Choropleths
+Clusters
+Timeline events
+Tracks (moving objects)
+Loading methods
+Integrate data for the map
+Ontology objects for the map
+Search Arounds for the map
+Functions for the map
+Ontology Actions for the map
+Map Layer Editor
+Templates and Workshop widget
+Map templates
+Embed a Map template in a Workshop module
+Configuration
+Settings
+Control Panel
+Add Map templates to a Marketplace product
+Vulcan
+Overview
+Tools
+Schema reference
+Embed Vulcan in a Workshop module
+Dynamic Scheduling
+Overview
+Getting started
+Core concepts
+Ontology primitives
+Scheduling Gantt Chart widget
+Schedule layer (puck) styling
+Suggestion Functions
+Search Functions
+Validation rules
+Inline metrics
+Row-level interactions
+Overview
+Triggering actions and events
+Schedule layer-level interactions
+Overview
+Drag to create
+Drag and drop
+Program Scheduling widget
+Overview
+Widget configuration
+Scheduling Calendar widget
+Overview
+Widget configuration
+Ontology architecture
+Overview and getting started
+Overview
+Breaking changes between OSv1 and OSv2
+Migrate from OSv1 to OSv2
+Aggregation considerations
+Object permissioning
+Overview
+Ontology permissions
+Legacy ontology permissions
+Managing object security
+Configuring restricted-view-backed object types
+Multi-datasource object types (MDOs)
+Object security policies
+Indexing
+Overview
+Funnel batch pipelines
+Funnel streaming pipelines
+Direct datasources
+Data restrictions
+FAQ
+Object edits and materializations
+Overview
+How user edits are applied
+Enable user edit history
+Permission checks for Actions
+Manage schema changes
+Materializations
+Object databases
+Object Storage v1 (Phonograph) [Planned deprecation]
+Ontology building

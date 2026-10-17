@@ -202,5 +202,52 @@ T('S4.6 create edit + auto/now', ()=>{
   ok(inc.props.code&&inc.props.code!=='{{auto}}','auto 渲染为新 id');
 });
 
+// ── S5 查询/搜索/审计统计 ──
+function _queryWorld(){
+  const s=CORE.createEmptyState();
+  CORE.addObjectType(s,{name:'seg'}); CORE.addObjectType(s,{name:'inc'});
+  const sid=CORE.schemaOf(s).objectTypes.find(t=>t.name==='seg').id;
+  CORE.addProperty(s,sid,{name:'name',baseType:'string'});
+  CORE.addProperty(s,sid,{name:'level',baseType:'string'});
+  CORE.updateObjectType(s,sid,{primaryKey:'name'});
+  CORE.addLinkType(s,{name:'on',from:'inc',to:'seg',cardinality:'N:1'});
+  s.data.objects.push(
+    {__id:'g1',__type:'seg',props:{name:'成渝立交',level:'高速'}},
+    {__id:'g2',__type:'seg',props:{name:'机场快速',level:'主干'}},
+    {__id:'e1',__type:'inc',props:{title:'两车追尾'}});
+  CORE.createLink(s,CORE.schemaOf(s).linkTypes[0].id,'e1','g1');
+  return s;
+}
+T('S5.1 查询与 label', ()=>{
+  const s=_queryWorld();
+  eq(CORE.objectsOfType(s,'seg').length,2,'两段');
+  eq(CORE.objectLabel(s,s.data.objects[0]),'成渝立交','name 优先');
+});
+T('S5.2 搜索大小写不敏感+跨属性', ()=>{
+  const s=_queryWorld();
+  eq(CORE.searchObjects(s,'seg','高速').length,1,'按 level 命中');
+  eq(CORE.searchObjects(s,'seg','成渝').length,1,'按 name 命中');
+  eq(CORE.searchObjects(s,'seg','').length,2,'空串全量');
+});
+T('S5.3 关联遍历', ()=>{
+  const s=_queryWorld();
+  const r=CORE.linkedObjects(s,'e1');
+  eq(r.length,1,'一条出边'); eq(r[0].direction,'out'); eq(r[0].object.__id,'g1');
+  eq(CORE.linkedObjects(s,'g1')[0].direction,'in','反向 in');
+});
+T('S5.4 审计过滤与用量柱状', ()=>{
+  const s=_queryWorld();
+  CORE.addActionType(s,{name:'ping',targets:[{role:'x',type:'seg'}],params:[],rules:[],
+    submissionCriteria:{requireConfirm:false},edits:[{op:'set',target:'x',field:'level',value:'拥堵'}],sideEffects:[]});
+  const aid=CORE.schemaOf(s).actionTypes[0].id;
+  CORE.runAction(s,aid,{params:{},targets:{x:'g1'},confirmed:true});
+  CORE.runAction(s,aid,{params:{},targets:{x:'g2'},confirmed:true});
+  eq(CORE.auditFor(s,{actionId:aid}).length,2,'按 action 过滤');
+  eq(CORE.auditFor(s,{objectId:'g1'}).length,1,'按对象过滤');
+  const u=CORE.usageByDay(s,aid,30);
+  eq(u.length,30,'30 天'); eq(u[u.length-1].count,2,'今天 2 次');
+  eq(CORE.unreadNotices(s),0,'无通知');
+});
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail?1:0);

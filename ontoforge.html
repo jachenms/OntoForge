@@ -309,7 +309,7 @@ function _applyEditsSim(state,at,ctx){
       const o=simObj(e.target)||newObjs[e.target];
       if(!o) return {error:'set 目标不存在: '+e.target};
       const v=renderTemplate(e.value,_renderCtx(ctx));
-      changes.push(`${e.target}.${e.field}: ${o.props[e.field]??'∅'} → ${v}`);
+      changes.push(`${e.target}(${o.__id}).${e.field}: ${o.props[e.field]??'∅'} → ${v}`);
       o.props[e.field]=v;
     } else if(e.op==='create'){
       const props={};
@@ -382,6 +382,52 @@ function runAction(state,actionId,input){
   return {ok:true,changes:r.changes};
 }
 
+// ── Task 6: 查询 / 搜索 / 关联遍历 / 审计统计 ──
+function objectsOfType(state,typeName){ return state.data.objects.filter(o=>o.__type===typeName); }
+function objectLabel(state,obj){
+  const t=_typeByName(state,obj.__type);
+  return obj.props.name||obj.props.title||(t&&t.primaryKey?obj.props[t.primaryKey]:null)||obj.__id;
+}
+function searchObjects(state,typeName,q){
+  const all=objectsOfType(state,typeName);
+  if(!q) return all;
+  const needle=String(q).toLowerCase();
+  return all.filter(o=>Object.values(o.props).some(v=>typeof v==='string'&&v.toLowerCase().includes(needle)));
+}
+function linkedObjects(state,objectId){
+  const s=schemaOf(state); const out=[];
+  for(const l of state.data.links){
+    const lt=s.linkTypes.find(x=>x.id===l.__type); if(!lt) continue;
+    if(l.from===objectId){ const o=state.data.objects.find(o=>o.__id===l.to); if(o) out.push({linkType:lt,direction:'out',object:o}); }
+    if(l.to===objectId){ const o=state.data.objects.find(o=>o.__id===l.from); if(o) out.push({linkType:lt,direction:'in',object:o}); }
+  }
+  return out;
+}
+function auditFor(state,filter){
+  return state.audit.filter(e=>{
+    if(filter.actionId&&e.actionId!==filter.actionId) return false;
+    if(filter.objectId){
+      const hit=e.diff.some(d=>d.includes(filter.objectId));
+      const obj=state.data.objects.find(o=>o.__id===filter.objectId);
+      const hitRole=obj&&e.diff.some(d=>d.includes(obj.__type));
+      if(!hit&&!hitRole) return false;
+    }
+    return true;
+  });
+}
+function usageByDay(state,actionId,days){
+  days=days||30; const map={};
+  for(const e of state.audit) if(e.actionId===actionId){ const d=e.ts.slice(0,10); map[d]=(map[d]||0)+1; }
+  const out=[]; const today=new Date();
+  for(let i=days-1;i>=0;i--){
+    const d=new Date(today.getTime()-i*86400000).toISOString().slice(0,10);
+    out.push({day:d,count:map[d]||0});
+  }
+  return out;
+}
+function unreadNotices(state){ return state.notices.filter(n=>!n.read).length; }
+function markNoticesRead(state){ state.notices.forEach(n=>n.read=true); }
+
 return { uid, clone, BASE_TYPES, RULE_OPS, CARDINALITIES, EDIT_OPS, createEmptyState, schemaOf, serialize, validateState, deserialize,
   addObjectType, updateObjectType, deleteObjectType,
   addProperty, updateProperty, deleteProperty,
@@ -389,7 +435,8 @@ return { uid, clone, BASE_TYPES, RULE_OPS, CARDINALITIES, EDIT_OPS, createEmptyS
   addLinkType, updateLinkType, deleteLinkType,
   createLink, deleteLink, linksOf,
   addActionType, updateActionType, deleteActionType, renderTemplate,
-  runAction, describeEdits };
+  runAction, describeEdits,
+  objectsOfType, objectLabel, searchObjects, linkedObjects, auditFor, usageByDay, unreadNotices, markNoticesRead };
 })();
 if(typeof globalThis!=='undefined') globalThis.CORE=CORE;
 </script>

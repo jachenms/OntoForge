@@ -125,5 +125,82 @@ T('S3.2 模板渲染', ()=>{
   eq(CORE.renderTemplate('{{now}}#{{auto}}',ctx),'2026-10-17#x_1');
 });
 
+// ── S4 runAction 引擎 ──
+function _engineWorld(){
+  const s=CORE.createEmptyState();
+  CORE.addObjectType(s,{name:'team'}); CORE.addObjectType(s,{name:'incident'});
+  const tid=CORE.schemaOf(s).objectTypes.find(t=>t.name==='team').id;
+  CORE.addProperty(s,tid,{name:'status',baseType:'enum',enumValues:['待命','出动']});
+  CORE.addLinkType(s,{name:'assigned',from:'team',to:'incident',cardinality:'M:N'});
+  s.data.objects.push({__id:'t1',__type:'team',props:{status:'待命'}},{__id:'t2',__type:'team',props:{status:'出动'}},{__id:'i1',__type:'incident',props:{status:'处理中'}});
+  return s;
+}
+const _dispatchDef={ name:'dispatch', targets:[{role:'team',type:'team'},{role:'inc',type:'incident'}],
+  params:[{name:'prio',type:'enum',enumValues:['高','低'],required:true}],
+  rules:[{target:'team',field:'status',op:'eq',value:'待命',message:'仅待命队伍可派遣'}],
+  submissionCriteria:{requireConfirm:true},
+  edits:[ {op:'set',target:'team',field:'status',value:'出动'},
+          {op:'addLink',linkType:'assigned',from:'team',to:'inc'} ],
+  sideEffects:[{type:'notify',config:{to:'调度',text:'{{param.prio}}优先级派遣'}},{type:'webhookLog',config:{url:'http://hook'}}] };
+T('S4.1 参数校验', ()=>{
+  const s=_engineWorld(); CORE.addActionType(s,_dispatchDef);
+  const aid=CORE.schemaOf(s).actionTypes[0].id;
+  const r=CORE.runAction(s,aid,{params:{},targets:{team:'t1',inc:'i1'}});
+  ok(!r.ok&&!r.needConfirm,'缺必填参数应失败'); ok(/prio/.test(r.error),'错误点名参数');
+});
+T('S4.2 规则校验', ()=>{
+  const s=_engineWorld(); CORE.addActionType(s,_dispatchDef);
+  const aid=CORE.schemaOf(s).actionTypes[0].id;
+  const r=CORE.runAction(s,aid,{params:{prio:'高'},targets:{team:'t2',inc:'i1'}});
+  ok(!r.ok&&r.error==='仅待命队伍可派遣','规则 message 原样返回');
+});
+T('S4.3 确认门槛+预览', ()=>{
+  const s=_engineWorld(); CORE.addActionType(s,_dispatchDef);
+  const aid=CORE.schemaOf(s).actionTypes[0].id;
+  const r=CORE.runAction(s,aid,{params:{prio:'高'},targets:{team:'t1',inc:'i1'}});
+  ok(!r.ok&&r.needConfirm===true,'应要求确认');
+  ok(r.preview.length>=2,'预览至少两条'); ok(!s.audit.length,'未确认不写审计');
+  ok(s.data.objects.find(o=>o.__id==='t1').props.status==='待命','未确认不改数据');
+});
+T('S4.4 成功路径:edits+副作用+审计', ()=>{
+  const s=_engineWorld(); CORE.addActionType(s,_dispatchDef);
+  const aid=CORE.schemaOf(s).actionTypes[0].id;
+  const r=CORE.runAction(s,aid,{params:{prio:'高'},targets:{team:'t1',inc:'i1'},confirmed:true,actor:'张三'});
+  ok(r.ok,r.error);
+  eq(s.data.objects.find(o=>o.__id==='t1').props.status,'出动','set 生效');
+  eq(s.data.links.length,1,'addLink 生效');
+  eq(s.notices.length,1,'notify 进通知中心');
+  ok(s.notices[0].text.includes('高'),'通知文本模板渲染');
+  eq(s.audit.length,1,'审计一条');
+  eq(s.audit[0].actor,'张三','审计记录 actor');
+  ok(s.audit[0].effects.some(e=>e.type==='webhookLog'),'webhookLog 记入审计');
+});
+T('S4.5 原子性:中途失败不留痕', ()=>{
+  const s=_engineWorld();
+  CORE.addActionType(s,{ name:'bad', targets:[{role:'team',type:'team'}], params:[], rules:[],
+    submissionCriteria:{requireConfirm:false},
+    edits:[ {op:'set',target:'team',field:'status',value:'出动'},
+            {op:'addLink',linkType:'assigned',from:'team',to:'ghost_role'} ],
+    sideEffects:[] });
+  const aid=CORE.schemaOf(s).actionTypes[0].id;
+  const r=CORE.runAction(s,aid,{params:{},targets:{team:'t1'},confirmed:true});
+  ok(!r.ok,'应失败');
+  eq(s.data.objects.find(o=>o.__id==='t1').props.status,'待命','数据回滚');
+  eq(s.audit.length,0,'不留审计');
+});
+T('S4.6 create edit + auto/now', ()=>{
+  const s=_engineWorld();
+  CORE.addActionType(s,{ name:'report', targets:[], params:[{name:'title',type:'string',required:true}], rules:[],
+    submissionCriteria:{requireConfirm:false},
+    edits:[{op:'create',target:'inc',objectType:'incident',props:{title:'{{param.title}}',reported:'{{now}}',code:'{{auto}}'}}],
+    sideEffects:[] });
+  const aid=CORE.schemaOf(s).actionTypes[0].id;
+  const r=CORE.runAction(s,aid,{params:{title:'追尾'},targets:{},confirmed:true});
+  ok(r.ok,r.error);
+  const inc=s.data.objects.find(o=>o.props&&o.props.title==='追尾');
+  ok(inc,'新对象创建'); ok(/^\d{4}-\d{2}-\d{2}$/.test(inc.props.reported),'now 渲染为日期');
+  ok(inc.props.code&&inc.props.code!=='{{auto}}','auto 渲染为新 id');
+});
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail?1:0);

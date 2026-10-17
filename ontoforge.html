@@ -246,13 +246,150 @@ function deleteActionType(state,id){
   s.actionTypes=s.actionTypes.filter(a=>a.id!==id); _bump(state); return {ok:true};
 }
 
+// ── Task 5: runAction 执行引擎 ──
+function _today(){ return new Date().toISOString().slice(0,10); }
+function _mkCtx(state,at,params,targets){
+  const resolved={};
+  for(const t of at.targets){
+    const oid=targets[t.role];
+    const obj=state.data.objects.find(o=>o.__id===oid);
+    if(!obj) return {error:'target 对象不存在: '+t.role};
+    if(obj.__type!==t.type) return {error:`target ${t.role} 须为 ${t.type}`};
+    resolved[t.role]=obj;
+  }
+  const roles=Object.keys(resolved);
+  return { ctx:{ param:params, targets:resolved, target:roles.length?resolved[roles[0]]:null, now:_today() } };
+}
+function _renderCtx(ctx){
+  // 每次渲染提供新 auto id
+  return Object.assign({},ctx,{ get auto(){ return uid('obj'); } });
+}
+function _validateParams(at,params){
+  for(const p of at.params){
+    const v=params[p.name];
+    if(p.required&&(v===undefined||v===null||v==='')) return '参数必填: '+p.name;
+    if(v===undefined||v===null||v==='') continue;
+    if(p.type==='number'&&isNaN(Number(v))) return '参数须为数字: '+p.name;
+    if(p.type==='enum'&&!p.enumValues.includes(v)) return '参数取值非法: '+p.name;
+  }
+  return null;
+}
+function _ruleLeft(ctx,target,field){
+  if(target==='param') return ctx.param[field];
+  const obj=ctx.targets[target];
+  return obj?obj.props[field]:undefined;
+}
+function _checkRules(at,ctx){
+  for(const r of at.rules){
+    const left=_ruleLeft(ctx,r.target,r.field);
+    const right=renderTemplate(String(r.value),ctx);
+    const vals=String(right).split('|');
+    let hit=false;
+    switch(r.op){
+      case 'eq': hit=String(left)===right; break;
+      case 'neq': hit=String(left)!==right; break;
+      case 'in': hit=vals.includes(String(left)); break;
+      case 'notIn': hit=!vals.includes(String(left)); break;
+      case 'gt': hit=Number(left)>Number(right); break;
+      case 'lt': hit=Number(left)<Number(right); break;
+      case 'ge': hit=Number(left)>=Number(right); break;
+      case 'le': hit=Number(left)<=Number(right); break;
+      case 'contains': hit=String(left??'').includes(right); break;
+    }
+    if(!hit) return r.message||`规则未通过:${r.target}.${r.field} ${r.op} ${r.value}`;
+  }
+  return null;
+}
+function _applyEditsSim(state,at,ctx){
+  const sim=clone(state.data); const changes=[];
+  const simObj=(role)=>{ const real=ctx.targets[role]; return real?sim.objects.find(o=>o.__id===real.__id):null; };
+  const newObjs={};
+  for(const e of at.edits){
+    if(e.op==='set'){
+      const o=simObj(e.target)||newObjs[e.target];
+      if(!o) return {error:'set 目标不存在: '+e.target};
+      const v=renderTemplate(e.value,_renderCtx(ctx));
+      changes.push(`${e.target}.${e.field}: ${o.props[e.field]??'∅'} → ${v}`);
+      o.props[e.field]=v;
+    } else if(e.op==='create'){
+      const props={};
+      for(const [k,tpl] of Object.entries(e.props)) props[k]=renderTemplate(tpl,_renderCtx(ctx));
+      const obj={ __id:uid('obj'), __type:e.objectType, props };
+      sim.objects.push(obj); if(e.target) newObjs[e.target]=obj;
+      changes.push(`新建 ${e.objectType}(${e.target||obj.__id})`);
+    } else if(e.op==='delete'){
+      const o=simObj(e.target); if(!o) return {error:'delete 目标不存在: '+e.target};
+      sim.objects=sim.objects.filter(x=>x.__id!==o.__id);
+      sim.links=sim.links.filter(l=>l.from!==o.__id&&l.to!==o.__id);
+      changes.push(`删除 ${e.target}(${o.__id})`);
+    } else if(e.op==='addLink'||e.op==='removeLink'){
+      const lt=schemaOf(state).linkTypes.find(l=>l.id===e.linkType||l.name===e.linkType);
+      const fo=(simObj(e.from)||newObjs[e.from]), to=(simObj(e.to)||newObjs[e.to]);
+      if(!lt) return {error:'linkType 不存在: '+e.linkType};
+      if(!fo||!to) return {error:e.op+' 端点角色未解析: '+e.from+'/'+e.to};
+      if(fo.__type!==lt.from||to.__type!==lt.to) return {error:`链接端点类型须为 ${lt.from} → ${lt.to}`};
+      if(e.op==='addLink'){
+        if(sim.links.some(l=>l.__type===lt.id&&l.from===fo.__id&&l.to===to.__id)) return {error:'链接已存在(基数/重复)'};
+        const fromSide=l=>l.__type===lt.id&&l.from===fo.__id, toSide=l=>l.__type===lt.id&&l.to===to.__id;
+        if((lt.cardinality==='1:1'||lt.cardinality==='N:1')&&sim.links.some(fromSide)) return {error:'基数约束:from 侧已有关联'};
+        if((lt.cardinality==='1:1'||lt.cardinality==='1:N')&&sim.links.some(toSide)) return {error:'基数约束:to 侧已有关联'};
+        sim.links.push({__id:uid('lk'),__type:lt.id,from:fo.__id,to:to.__id});
+        changes.push(`建链接 ${lt.name}:${e.from} → ${e.to}`);
+      } else {
+        const n=sim.links.length;
+        sim.links=sim.links.filter(l=>!(l.__type===lt.id&&l.from===fo.__id&&l.to===to.__id));
+        if(sim.links.length===n) return {error:'待删链接不存在'};
+        changes.push(`删链接 ${lt.name}:${e.from} → ${e.to}`);
+      }
+    }
+  }
+  // create 产生的对象补充进 ctx.targets 供后续 edits/模板引用
+  for(const [role,obj] of Object.entries(newObjs)) ctx.targets[role]=obj;
+  return { sim, changes };
+}
+function describeEdits(state,at,ctx){
+  const r=_applyEditsSim(state,at,clone(ctx));
+  if(r.error) return ['(预览失败) '+r.error];
+  return r.changes;
+}
+function runAction(state,actionId,input){
+  const at=schemaOf(state).actionTypes.find(a=>a.id===actionId);
+  if(!at) return {ok:false,error:'动作不存在'};
+  const params=input.params||{}, targets=input.targets||{};
+  const pe=_validateParams(at,params); if(pe) return {ok:false,error:pe};
+  const cr=_mkCtx(state,at,params,targets); if(cr.error) return {ok:false,error:cr.error};
+  const ctx=cr.ctx;
+  const re=_checkRules(at,ctx); if(re) return {ok:false,error:re};
+  if(at.submissionCriteria&&at.submissionCriteria.requireConfirm&&!input.confirmed){
+    return {ok:false,needConfirm:true,preview:describeEdits(state,at,ctx)};
+  }
+  const r=_applyEditsSim(state,at,ctx);
+  if(r.error) return {ok:false,error:r.error};
+  state.data=r.sim;
+  const effects=[];
+  for(const f of at.sideEffects){
+    if(f.type==='notify'){
+      const text=renderTemplate((f.config&&f.config.text)||'',ctx);
+      state.notices.push({ id:uid('nt'), ts:new Date().toISOString(), to:(f.config&&f.config.to)||'', text, read:false, actionId });
+      effects.push({type:'notify',text});
+    } else if(f.type==='webhookLog'){
+      effects.push({type:'webhookLog',note:'已记录 webhook 调用(原型不落网)'});
+    }
+  }
+  state.audit.push({ id:uid('au'), ts:new Date().toISOString(), branch:state.branch.current,
+    actor:input.actor||'本地用户', actionId, actionLabel:at.label,
+    summary:`${at.label} · ${r.changes.length} 项变更`, diff:r.changes, effects });
+  return {ok:true,changes:r.changes};
+}
+
 return { uid, clone, BASE_TYPES, RULE_OPS, CARDINALITIES, EDIT_OPS, createEmptyState, schemaOf, serialize, validateState, deserialize,
   addObjectType, updateObjectType, deleteObjectType,
   addProperty, updateProperty, deleteProperty,
   addSharedProp, attachSharedProp, detachSharedProp, deleteSharedProp,
   addLinkType, updateLinkType, deleteLinkType,
   createLink, deleteLink, linksOf,
-  addActionType, updateActionType, deleteActionType, renderTemplate };
+  addActionType, updateActionType, deleteActionType, renderTemplate,
+  runAction, describeEdits };
 })();
 if(typeof globalThis!=='undefined') globalThis.CORE=CORE;
 </script>

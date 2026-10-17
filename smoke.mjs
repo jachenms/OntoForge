@@ -401,5 +401,12 @@ T('S12.1 视图挂载', ()=>{
     ok(app.includes(v),'缺 '+v);
 });
 
+// ── S13 分支中心/设置 静态断言 ──
+T('S13.1 视图挂载', ()=>{
+  const app=section('appjs');
+  for(const v of ['VIEWS.branches','VIEWS.settings','proposeMerge','mergeProposal','rejectProposal','导入','导出','仅隔离 schema','空白本体'])
+    ok(app.includes(v),'缺 '+v);
+});
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail?1:0);

@@ -668,7 +668,7 @@ function load(){
     if(raw){ const s=JSON.parse(raw); const errs=CORE.validateState(s); if(!errs.length) return s; } }catch(e){}
   try{ const raw=localStorage.getItem(LS_BAK);
     if(raw){ const s=JSON.parse(raw); const errs=CORE.validateState(s); if(!errs.length){ toast('主存档损坏,已从备份恢复','error'); return s; } } }catch(e){}
-  return SEED.traffic();
+  return null;  // Task 14 forward-fix:无存档时返回 null,由 boot 弹 onboarding 二选一
 }
 function save(){
   clearTimeout(saveTimer);
@@ -708,14 +708,14 @@ function toast(msg,kind){
   const t=document.createElement('div'); t.className='toast'+(kind==='error'?' error':''); t.textContent=msg;
   $('#toasts').appendChild(t); setTimeout(()=>t.remove(),3600);
 }
-function modal({title,bodyHTML,actions}){
+function modal({title,bodyHTML,actions,persistent}){
   const host=$('#modal-root');
   const mask=document.createElement('div'); mask.className='modal-mask';
   mask.innerHTML=`<div class="modal"><h3>${esc(title)}</h3><div class="modal-body">${bodyHTML}</div><div class="modal-actions"></div></div>`;
   host.appendChild(mask); // 栈式:每次独立节点,可叠加
-  const escH=e=>{ if(e.key==='Escape'&&host.lastElementChild===mask) close(); };
+  const escH=e=>{ if(!persistent&&e.key==='Escape'&&host.lastElementChild===mask) close(); };
   const close=()=>{ mask.remove(); document.removeEventListener('keydown',escH); };
-  mask.addEventListener('click',e=>{ if(e.target===mask) close(); });
+  if(!persistent) mask.addEventListener('click',e=>{ if(e.target===mask) close(); });
   document.addEventListener('keydown',escH);
   const bar=mask.querySelector('.modal-actions');
   (actions||[{label:'关闭'}]).forEach(a=>{
@@ -739,7 +739,17 @@ function bindChrome(){
     if(kind==='sharedProp'&&VIEWS._newSharedProp) VIEWS._newSharedProp();
   });
 }
-function boot(){ state=load(); bindChrome(); render(); }
+function boot(){
+  state=load(); bindChrome();
+  if(!state){
+    // Task 14 forward-fix:首次启动(无任何存档键)必须二选一,不再默认 traffic
+    modal({title:'欢迎使用 OntoForge 本体工坊',bodyHTML:'<p>选择初始本体:</p>',persistent:true,actions:[
+      {label:'🚦 交通应急示例',kind:'primary',onClick:()=>{ state=SEED.traffic(); save(); render(); }},
+      {label:'⬜ 空白本体',onClick:()=>{ state=SEED.blank(); save(); render(); }}]});
+    return;
+  }
+  render();
+}
 document.addEventListener('DOMContentLoaded',boot);
 return { get state(){return state;}, set state(s){state=s;}, store:{load,save,reset}, replace, go, render, toast, modal, esc, VIEWS, $, $$ };
 })();
@@ -1214,7 +1224,7 @@ APP.openRunAction=(actionId,prefill)=>{
 // ── 通知中心 ──
 document.addEventListener('DOMContentLoaded',()=>{
   document.querySelector('#btn-notify').addEventListener('click',()=>{
-    const state=APP.state;
+    const state=APP.state; if(!state) return; // onboarding 未选择前不响应
     const list=[...state.notices].reverse();
     APP.modal({title:'🔔 通知中心',bodyHTML:
       list.map(n=>`<div style="border-bottom:1px solid var(--line);padding:8px 0;${n.read?'opacity:.55':''}">
@@ -1353,7 +1363,8 @@ document.addEventListener('DOMContentLoaded',()=>{
   const gs=document.querySelector('#global-search');
   gs.addEventListener('keydown',e=>{
     if(e.key!=='Enter'||!gs.value.trim()) return;
-    const state=APP.state, sch=CORE.schemaOf(state), q=gs.value.trim().toLowerCase();
+    const state=APP.state; if(!state) return; // onboarding 未选择前不响应
+    const sch=CORE.schemaOf(state), q=gs.value.trim().toLowerCase();
     const t=sch.objectTypes.find(t=>(t.label||'').toLowerCase().includes(q)||t.name.includes(q));
     if(t){ APP.go('objectType',t.id); return; }
     const a=sch.actionTypes.find(a=>(a.label||'').toLowerCase().includes(q)||a.name.includes(q));
@@ -1365,6 +1376,119 @@ document.addEventListener('DOMContentLoaded',()=>{
     APP.toast('未找到匹配: '+gs.value,'error');
   });
 });
+
+// ── 分支中心 ──
+APP.VIEWS.branches=(el,state)=>{
+  const E=APP.esc;
+  const diffHTML=d=>{
+    const fieldDiff=x=>{  // changed 条目:before/after 字段级 JSON 差异行(忽略 id)
+      const b={...x.before}, a={...x.after}; delete b.id; delete a.id;
+      const keys=[...new Set([...Object.keys(b),...Object.keys(a)])];
+      const rows=keys.filter(k=>JSON.stringify(b[k])!==JSON.stringify(a[k]))
+        .map(k=>`<div class="mono" style="font-size:11px;color:#92400e;padding-left:18px">${E(k)}: <s style="color:var(--dan)">${E(JSON.stringify(b[k])??'∅')}</s> → <span style="color:#16a34a">${E(JSON.stringify(a[k])??'∅')}</span></div>`);
+      return rows.join('');
+    };
+    const sec=(t,c)=>{ const items=[];
+      c.added.forEach(x=>items.push(`<div style="color:#16a34a">＋ ${E(x.name)}</div>`));
+      c.removed.forEach(x=>items.push(`<div style="color:var(--dan)">－ ${E(x.name)}</div>`));
+      c.changed.forEach(x=>items.push(`<div style="color:#d97706">✎ ${E(x.name)}</div>${fieldDiff(x)}`));
+      return items.length?`<div style="margin-bottom:6px"><b>${t}</b>${items.join('')}</div>`:'';
+    };
+    return sec('对象类型',d.objectTypes)+sec('链接类型',d.linkTypes)+sec('动作类型',d.actionTypes)+sec('共享属性',d.sharedProps)||'<span class="mut">无差异</span>';
+  };
+  const open=state.proposals.filter(p=>p.status==='open');
+  const hist=state.proposals.filter(p=>p.status!=='open');
+  el.innerHTML=`<h2>🌿 分支中心</h2>
+  <div class="card" style="background:#fffbeb;border-color:#fde68a"><b>说明:</b>分支仅隔离 schema(类型/链接/动作定义),实例数据全局共享 —— 这是原型的诚实简化。</div>
+  <div class="grid2">
+    <div class="card"><h3>分支</h3>
+      ${state.branch.list.map(b=>`<div style="padding:6px 0;border-bottom:1px solid var(--line)">
+        🌿 <b>${E(b.name)}</b> <span class="badge">${b.status}</span>
+        ${b.name===state.branch.current?'<span class="badge" style="background:#dbeafe">当前</span>'
+          :`<a data-sw="${E(b.name)}" style="cursor:pointer;color:var(--pri);font-size:12px">切换</a>`}
+      </div>`).join('')}
+      <div class="form-row" style="margin-top:12px"><label>新建分支(基于 main)</label>
+        <div style="display:flex;gap:8px"><input id="br-name" placeholder="feature-xxx"><button class="btn btn-primary" id="br-new">创建</button></div>
+        <div class="form-err" id="br-err"></div></div>
+    </div>
+    <div class="card"><h3>发起提案(合并回 main)</h3>
+      <div style="display:flex;gap:8px">
+        <select id="pr-branch">${state.branch.list.filter(b=>b.name!=='main'&&b.status==='active').map(b=>`<option>${E(b.name)}</option>`).join('')}</select>
+        <button class="btn btn-primary" id="pr-new">创建提案</button></div>
+      <div class="form-err" id="pr-err"></div>
+      <div class="mut" style="margin-top:8px">提案会计算该分支与 main 的 schema diff,评审后合并或拒绝。</div>
+    </div>
+  </div>
+  <div class="card"><h3>待评审提案(${open.length})</h3>
+    ${open.map(p=>`<div class="card" style="background:#f8fafc">
+      <b>${E(p.branch)}</b> → main <span class="mut mono">${p.createdAt.slice(0,10)}</span>
+      <div style="margin:10px 0">${diffHTML(p.diff)}</div>
+      <button class="btn btn-primary" data-merge="${p.id}">✓ 合并</button>
+      <button class="btn btn-danger" data-reject="${p.id}">✕ 拒绝</button></div>`).join('')||'<span class="mut">无待审提案</span>'}
+  </div>
+  <div class="card"><h3>历史提案</h3>
+    ${hist.map(p=>`<div style="padding:4px 0"><span class="badge">${p.status}</span> ${E(p.branch)} <span class="mut mono">${p.createdAt.slice(0,10)}</span></div>`).join('')||'<span class="mut">无</span>'}
+  </div>`;
+  el.querySelectorAll('[data-sw]').forEach(a=>a.onclick=()=>{
+    const r=CORE.switchBranch(state,a.dataset.sw); r.ok?(APP.store.save(),APP.render(),APP.toast('已切换')):APP.toast(r.error,'error');
+  });
+  el.querySelector('#br-new').onclick=()=>{
+    const r=CORE.createBranch(state,el.querySelector('#br-name').value.trim());
+    r.ok?(APP.store.save(),APP.render(),APP.toast('分支已创建并切换')):el.querySelector('#br-err').textContent=r.error;
+  };
+  const prBtn=el.querySelector('#pr-new');
+  if(prBtn) prBtn.onclick=()=>{
+    const r=CORE.proposeMerge(state,el.querySelector('#pr-branch').value);
+    r.ok?(APP.store.save(),APP.render(),APP.toast('提案已创建')):el.querySelector('#pr-err').textContent=r.error;
+  };
+  el.querySelectorAll('[data-merge]').forEach(b=>b.onclick=()=>{
+    const r=CORE.mergeProposal(state,b.dataset.merge);
+    r.ok?(APP.store.save(),APP.render(),APP.toast('已合并到 main')):APP.toast(r.error,'error');
+  });
+  el.querySelectorAll('[data-reject]').forEach(b=>b.onclick=()=>{
+    const r=CORE.rejectProposal(state,b.dataset.reject);
+    r.ok?(APP.store.save(),APP.render(),APP.toast('已拒绝')):APP.toast(r.error,'error');
+  });
+};
+
+// ── 设置 / 导入导出 ──
+APP.VIEWS.settings=(el,state)=>{
+  el.innerHTML=`<h2>⚙️ 数据管理</h2>
+  <div class="card"><h3>导出</h3>
+    <button class="btn btn-primary" id="st-export">⬇ 导出本体 JSON</button>
+    <div class="mut" style="margin-top:6px">含全部 schema、实例、审计、分支与提案,可备份或迁移。</div></div>
+  <div class="card"><h3>导入</h3>
+    <input type="file" id="st-import" accept=".json,application/json">
+    <div class="form-err" id="st-err"></div>
+    <div class="mut" style="margin-top:6px">导入前做 schema 校验,非法文件将被拒绝。</div></div>
+  <div class="card"><h3>重置</h3>
+    <button class="btn" id="st-seed-traffic">🚦 重置为交通应急种子</button>
+    <button class="btn" id="st-seed-blank">⬜ 重置为空白本体</button>
+    <button class="btn btn-danger" id="st-wipe">🗑 清空存档</button>
+    <div class="mut" style="margin-top:6px">重置/清空将覆盖当前全部数据(原存档仍保留在浏览器备份键一次)。</div></div>`;
+  el.querySelector('#st-export').onclick=()=>{
+    const blob=new Blob([CORE.serialize(state)],{type:'application/json'});
+    const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
+    a.download=`ontoforge-${state.meta.ontologyName}-${new Date().toISOString().slice(0,10)}.json`; a.click();
+    URL.revokeObjectURL(a.href);
+  };
+  el.querySelector('#st-import').onchange=e=>{
+    const f=e.target.files[0]; if(!f) return;
+    const rd=new FileReader();
+    rd.onload=()=>{ const r=CORE.deserialize(rd.result);
+      if(!r.ok){ el.querySelector('#st-err').textContent='导入失败: '+r.error; return; }
+      APP.replace(r.state); APP.toast('导入成功'); };
+    rd.readAsText(f);
+  };
+  const confirmReset=(label,fn)=>APP.modal({title:label,bodyHTML:'确定?当前数据将被覆盖。',actions:[
+    {label:'取消'},{label:'确定',kind:'danger',onClick:()=>{ fn(); }}]});
+  el.querySelector('#st-seed-traffic').onclick=()=>confirmReset('重置为交通应急种子',()=>APP.replace(SEED.traffic()));
+  el.querySelector('#st-seed-blank').onclick=()=>confirmReset('重置为空白本体',()=>APP.replace(SEED.blank()));
+  el.querySelector('#st-wipe').onclick=()=>confirmReset('清空存档',()=>APP.store.reset());
+};
+
+// ── 首次启动 onboarding 说明 ──
+// load() 在无任何存档键时返回 null;boot 检测后弹 persistent modal 二选一(见 Task 9 boot 的 forward-fix)。
 </script>
 </body>
 </html>

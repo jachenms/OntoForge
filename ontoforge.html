@@ -188,12 +188,71 @@ function deleteLink(state,linkId){
 }
 function linksOf(state,linkTypeId){ return state.data.links.filter(l=>l.__type===linkTypeId); }
 
-return { uid, clone, BASE_TYPES, RULE_OPS, CARDINALITIES, createEmptyState, schemaOf, serialize, validateState, deserialize,
+// ── Task 4: 动作类型 CRUD / 模板渲染 ──
+const EDIT_OPS=['set','create','delete','addLink','removeLink'];
+function renderTemplate(tpl,ctx){
+  if(typeof tpl!=='string') return tpl;
+  return tpl.replace(/\{\{\s*([^}]+?)\s*\}\}/g,(m,path)=>{
+    const v=path.trim().split('.').reduce((o,k)=>(o==null?o:o[k]),ctx);
+    return v==null?'':String(v);
+  });
+}
+function _validateActionDef(state,def,excludeId){
+  const s=schemaOf(state);
+  if(!NAME_RE.test(def.name||'')) return 'name 需为蛇形标识';
+  if(s.actionTypes.some(a=>a.name===def.name&&a.id!==excludeId)) return '动作类型重名';
+  const roles=new Set();
+  for(const t of (def.targets||[])){
+    if(!NAME_RE.test(t.role||'')) return 'target role 需为蛇形标识';
+    if(roles.has(t.role)) return 'target role 重复: '+t.role;
+    roles.add(t.role);
+    if(!_typeByName(state,t.type)) return 'target 类型不存在: '+t.type;
+  }
+  const pnames=new Set();
+  for(const p of (def.params||[])){
+    if(!NAME_RE.test(p.name||'')) return '参数 name 需为蛇形标识';
+    if(pnames.has(p.name)) return '参数重名: '+p.name;
+    pnames.add(p.name);
+    if(!BASE_TYPES.includes(p.type)) return '参数非法 type: '+p.type;
+    if(p.type==='enum'&&(!Array.isArray(p.enumValues)||!p.enumValues.length)) return 'enum 参数需 enumValues';
+  }
+  for(const r of (def.rules||[])) if(!RULE_OPS.includes(r.op)) return '规则非法 op: '+r.op;
+  for(const e of (def.edits||[])){
+    if(!EDIT_OPS.includes(e.op)) return 'edit 非法 op: '+e.op;
+    if(e.op==='create'&&(!e.objectType||!e.props||typeof e.props!=='object')) return 'create edit 需 objectType+props';
+    if(e.op==='create'&&!_typeByName(state,e.objectType)) return 'create 的类型不存在: '+e.objectType;
+    if((e.op==='addLink'||e.op==='removeLink')&&!(e.linkType&&e.from&&e.to)) return e.op+' 需 linkType+from+to';
+    if((e.op==='addLink'||e.op==='removeLink')&&e.linkType&&!schemaOf(state).linkTypes.some(l=>l.id===e.linkType||l.name===e.linkType)) return 'linkType 不存在: '+e.linkType;
+  }
+  for(const f of (def.sideEffects||[])) if(!['notify','webhookLog'].includes(f.type)) return '非法副作用: '+f.type;
+  return null;
+}
+function addActionType(state,def){
+  const err=_validateActionDef(state,def,null); if(err) return {ok:false,error:err};
+  const at={ id:uid('at'), name:def.name, label:def.label||def.name,
+    targets:def.targets||[], params:def.params||[], rules:def.rules||[],
+    submissionCriteria:def.submissionCriteria||{requireConfirm:false},
+    edits:def.edits||[], sideEffects:def.sideEffects||[] };
+  schemaOf(state).actionTypes.push(at); _bump(state); return {ok:true,id:at.id};
+}
+function updateActionType(state,id,patch){
+  const s=schemaOf(state); const at=s.actionTypes.find(a=>a.id===id); if(!at) return {ok:false,error:'动作类型不存在'};
+  const merged=Object.assign({},at,patch,{id,name:at.name});
+  const err=_validateActionDef(state,merged,id); if(err) return {ok:false,error:err};
+  Object.assign(at,merged); _bump(state); return {ok:true};
+}
+function deleteActionType(state,id){
+  const s=schemaOf(state);
+  s.actionTypes=s.actionTypes.filter(a=>a.id!==id); _bump(state); return {ok:true};
+}
+
+return { uid, clone, BASE_TYPES, RULE_OPS, CARDINALITIES, EDIT_OPS, createEmptyState, schemaOf, serialize, validateState, deserialize,
   addObjectType, updateObjectType, deleteObjectType,
   addProperty, updateProperty, deleteProperty,
   addSharedProp, attachSharedProp, detachSharedProp, deleteSharedProp,
   addLinkType, updateLinkType, deleteLinkType,
-  createLink, deleteLink, linksOf };
+  createLink, deleteLink, linksOf,
+  addActionType, updateActionType, deleteActionType, renderTemplate };
 })();
 if(typeof globalThis!=='undefined') globalThis.CORE=CORE;
 </script>

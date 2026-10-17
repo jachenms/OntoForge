@@ -100,5 +100,30 @@ T('S2.3 N:1 唯一性', ()=>{
   ok(CORE.createLink(s,lt,'i1','t2').ok,'删后可重建');
 });
 
+// ── S3 动作类型定义/模板 ──
+T('S3.1 动作类型 CRUD+结构校验', ()=>{
+  const s=CORE.createEmptyState();
+  CORE.addObjectType(s,{name:'incident'}); CORE.addObjectType(s,{name:'team'});
+  const bad=CORE.addActionType(s,{name:'a1',targets:[{role:'t',type:'ghost'}],params:[],rules:[],edits:[],sideEffects:[]});
+  ok(!bad.ok,'target 类型不存在应拒绝');
+  const def={ name:'dispatch', label:'派遣',
+    targets:[{role:'team',type:'team'},{role:'inc',type:'incident'}],
+    params:[{name:'note',type:'string',required:false}],
+    rules:[{target:'team',field:'status',op:'eq',value:'待命',message:'仅待命可派遣'}],
+    submissionCriteria:{requireConfirm:true},
+    edits:[{op:'set',target:'team',field:'status',value:'出动'}],
+    sideEffects:[{type:'notify',config:{to:'调度中心',text:'已派遣'}}] };
+  const r=CORE.addActionType(s,def); ok(r.ok,r.error);
+  ok(!CORE.addActionType(s,def).ok,'重名拒绝');
+  ok(CORE.updateActionType(s,r.id,{label:'派遣队伍'}).ok,'改 label');
+  ok(CORE.deleteActionType(s,r.id).ok,'删除');
+});
+T('S3.2 模板渲染', ()=>{
+  const ctx={param:{title:'追尾'},targets:{inc:{props:{status:'处理中'}}},now:'2026-10-17',auto:'x_1'};
+  eq(CORE.renderTemplate('上报:{{param.title}}/{{targets.inc.props.status}}',ctx),'上报:追尾/处理中');
+  eq(CORE.renderTemplate('{{missing.deep}}',ctx),'','缺路径给空串');
+  eq(CORE.renderTemplate('{{now}}#{{auto}}',ctx),'2026-10-17#x_1');
+});
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail?1:0);

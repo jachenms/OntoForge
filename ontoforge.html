@@ -709,16 +709,18 @@ function toast(msg,kind){
   $('#toasts').appendChild(t); setTimeout(()=>t.remove(),3600);
 }
 function modal({title,bodyHTML,actions}){
-  const root=$('#modal-root');
-  root.innerHTML=`<div class="modal-mask"><div class="modal"><h3>${esc(title)}</h3><div class="modal-body">${bodyHTML}</div><div class="modal-actions"></div></div></div>`;
-  const close=()=>{root.innerHTML='';};
-  root.querySelector('.modal-mask').addEventListener('click',e=>{ if(e.target.classList.contains('modal-mask')) close(); });
-  const escH=e=>{ if(e.key==='Escape'){close();document.removeEventListener('keydown',escH);} };
+  const host=$('#modal-root');
+  const mask=document.createElement('div'); mask.className='modal-mask';
+  mask.innerHTML=`<div class="modal"><h3>${esc(title)}</h3><div class="modal-body">${bodyHTML}</div><div class="modal-actions"></div></div>`;
+  host.appendChild(mask); // 栈式:每次独立节点,可叠加
+  const escH=e=>{ if(e.key==='Escape'&&host.lastElementChild===mask) close(); };
+  const close=()=>{ mask.remove(); document.removeEventListener('keydown',escH); };
+  mask.addEventListener('click',e=>{ if(e.target===mask) close(); });
   document.addEventListener('keydown',escH);
-  const bar=root.querySelector('.modal-actions');
+  const bar=mask.querySelector('.modal-actions');
   (actions||[{label:'关闭'}]).forEach(a=>{
     const b=document.createElement('button'); b.className='btn'+(a.kind?' btn-'+a.kind:''); b.textContent=a.label;
-    b.onclick=()=>{ const r=a.onClick&&a.onClick(root); if(r!==false) close(); };
+    b.onclick=()=>{ const r=a.onClick&&a.onClick(mask); if(r!==false) close(); };
     bar.appendChild(b);
   });
   return close;
@@ -1041,6 +1043,199 @@ APP.VIEWS._newSharedProp=()=>{
         label:root.querySelector('#ns-label').value,baseType:root.querySelector('#ns-bt').value});
       if(!r.ok){ root.querySelector('#ns-err').textContent=r.error; return false; }
       APP.store.save(); APP.render(); APP.toast('共享属性已创建');
+    }}]});
+};
+
+// ── ActionType 视图 ──
+APP.VIEWS.actionType=(el,state)=>{
+  const sch=CORE.schemaOf(state);
+  const a=sch.actionTypes.find(x=>x.id===state.ui.sel);
+  if(!a){ el.innerHTML='<p class="mut">动作不存在</p>'; return; }
+  const tab=(state.ui.sel2||'overview');
+  const tabs=[['overview','Overview'],['logic','Logic'],['obs','Observability']];
+  el.innerHTML=`<h2>⚡ ${APP.esc(a.label||a.name)} <span class="badge mono">${a.name}</span>
+    <button class="btn btn-primary" id="at-run" style="float:right">▶ 运行</button></h2>
+  <div style="margin-bottom:14px">${tabs.map(([k,l])=>`<button class="btn ${tab===k?'btn-primary':''}" data-tab="${k}">${l}</button>`).join(' ')}
+    <button class="btn btn-danger" id="at-del" style="float:right">删除动作</button></div>
+  <div id="at-body"></div>`;
+  el.querySelectorAll('[data-tab]').forEach(b=>b.onclick=()=>{ state.ui.sel2=b.dataset.tab; APP.store.save(); APP.render(); });
+  el.querySelector('#at-run').onclick=()=>APP.openRunAction(a.id);
+  el.querySelector('#at-del').onclick=()=>{
+    const r=CORE.deleteActionType(state,a.id);
+    r.ok?(APP.store.save(),APP.go('discover'),APP.toast('已删除')):APP.toast(r.error,'error');
+  };
+  const body=el.querySelector('#at-body');
+  if(tab==='overview'){
+    body.innerHTML=`<div class="card"><h3>基本信息</h3>
+      <div class="form-row"><label>Label</label><input id="a-label" value="${APP.esc(a.label||'')}"></div>
+      <div class="mut">目标角色:${a.targets.map(t=>`<span class="chip">${t.role} : ${t.type}</span>`).join('')||'无'}</div>
+      <div style="margin-top:10px"><button class="btn btn-primary" id="a-label-save">保存 Label</button></div></div>
+      <div class="card"><h3>说明</h3><div class="mut">在 Logic 页配置参数→规则→提交条件→编辑→副作用流水线;在 Observability 页查看调用量与历史。</div></div>`;
+    body.querySelector('#a-label-save').onclick=()=>{
+      const r=CORE.updateActionType(state,a.id,{label:body.querySelector('#a-label').value});
+      r.ok?(APP.store.save(),APP.render(),APP.toast('已保存')):APP.toast(r.error,'error');
+    };
+  }
+  if(tab==='logic'){
+    const E=APP.esc;
+    body.innerHTML=`
+    <div class="card"><h3>① 参数 Params</h3><div id="lg-params"></div><button class="btn" id="lg-add-param">＋ 参数</button></div>
+    <div class="card"><h3>② 规则 Rules(执行前校验)</h3><div id="lg-rules"></div><button class="btn" id="lg-add-rule">＋ 规则</button></div>
+    <div class="card"><h3>③ 提交条件</h3>
+      <label><input type="checkbox" id="lg-confirm" ${a.submissionCriteria?.requireConfirm?'checked':''}> 需要用户确认</label>
+      <div class="form-row" style="margin-top:8px"><label>确认提示</label><input id="lg-note" value="${E(a.submissionCriteria?.note||'')}"></div></div>
+    <div class="card"><h3>④ 编辑 Edits(模板支持 {{param.x}} {{targets.role.prop}} {{now}} {{auto}})</h3><div id="lg-edits"></div><button class="btn" id="lg-add-edit">＋ 编辑</button></div>
+    <div class="card"><h3>⑤ 副作用 Side effects</h3><div id="lg-effects"></div><button class="btn" id="lg-add-eff">＋ 副作用</button></div>
+    <button class="btn btn-primary" id="lg-save" style="position:sticky;bottom:12px">💾 保存 Logic</button>
+    <div class="form-err" id="lg-err"></div>`;
+    const paramRow=(p={})=>`<div class="grid2 lg-row" style="border-bottom:1px dashed var(--line);padding:8px 0">
+      <input data-f="name" placeholder="name" class="mono" value="${E(p.name||'')}">
+      <input data-f="label" placeholder="label" value="${E(p.label||'')}">
+      <select data-f="type">${CORE.BASE_TYPES.map(b=>`<option ${p.type===b?'selected':''}>${b}</option>`).join('')}</select>
+      <input data-f="enumValues" placeholder="枚举值,逗号分隔" value="${E((p.enumValues||[]).join(','))}">
+      <label><input type="checkbox" data-f="required" ${p.required?'checked':''}> 必填</label>
+      <button class="btn lg-del">删</button></div>`;
+    const ruleRow=(r={})=>`<div class="grid2 lg-row" style="border-bottom:1px dashed var(--line);padding:8px 0">
+      <input data-f="target" placeholder="target role" class="mono" value="${E(r.target||'')}">
+      <input data-f="field" placeholder="field" class="mono" value="${E(r.field||'')}">
+      <select data-f="op">${CORE.RULE_OPS.map(o=>`<option ${r.op===o?'selected':''}>${o}</option>`).join('')}</select>
+      <input data-f="value" placeholder="value(in 用 | 分隔)" value="${E(r.value||'')}">
+      <input data-f="message" placeholder="失败提示" value="${E(r.message||'')}">
+      <button class="btn lg-del">删</button></div>`;
+    const editRow=(e={})=>`<div class="grid2 lg-row" style="border-bottom:1px dashed var(--line);padding:8px 0">
+      <select data-f="op">${CORE.EDIT_OPS.map(o=>`<option ${e.op===o?'selected':''}>${o}</option>`).join('')}</select>
+      <input data-f="target" placeholder="target role" class="mono" value="${E(e.target||'')}">
+      <input data-f="field" placeholder="field(set)" class="mono" value="${E(e.field||'')}">
+      <input data-f="value" placeholder="value 模板" value="${E(e.value||'')}">
+      <input data-f="objectType" placeholder="objectType(create)" class="mono" value="${E(e.objectType||'')}">
+      <input data-f="props" placeholder='props JSON(create)' class="mono" value="${E(e.props?JSON.stringify(e.props):'')}">
+      <input data-f="linkType" placeholder="linkType(add/removeLink)" class="mono" value="${E(e.linkType||'')}">
+      <input data-f="from" placeholder="from role" class="mono" value="${E(e.from||'')}">
+      <input data-f="to" placeholder="to role" class="mono" value="${E(e.to||'')}">
+      <button class="btn lg-del">删</button></div>`;
+    const effRow=(f={})=>`<div class="grid2 lg-row" style="border-bottom:1px dashed var(--line);padding:8px 0">
+      <select data-f="type"><option ${f.type==='notify'?'selected':''}>notify</option><option ${f.type==='webhookLog'?'selected':''}>webhookLog</option></select>
+      <input data-f="to" placeholder="to(notify)" value="${E(f.config?.to||'')}">
+      <input data-f="text" placeholder="text 模板(notify)" value="${E(f.config?.text||'')}">
+      <input data-f="url" placeholder="url(webhookLog)" class="mono" value="${E(f.config?.url||'')}">
+      <button class="btn lg-del">删</button></div>`;
+    body.querySelector('#lg-params').innerHTML=a.params.map(paramRow).join('');
+    body.querySelector('#lg-rules').innerHTML=a.rules.map(ruleRow).join('');
+    body.querySelector('#lg-edits').innerHTML=a.edits.map(editRow).join('');
+    body.querySelector('#lg-effects').innerHTML=a.sideEffects.map(effRow).join('');
+    const addRow=(box,row)=>{ box.insertAdjacentHTML('beforeend',row()); };
+    body.querySelector('#lg-add-param').onclick=()=>addRow(body.querySelector('#lg-params'),paramRow);
+    body.querySelector('#lg-add-rule').onclick=()=>addRow(body.querySelector('#lg-rules'),ruleRow);
+    body.querySelector('#lg-add-edit').onclick=()=>addRow(body.querySelector('#lg-edits'),editRow);
+    body.querySelector('#lg-add-eff').onclick=()=>addRow(body.querySelector('#lg-effects'),effRow);
+    body.addEventListener('click',e=>{ if(e.target.classList.contains('lg-del')) e.target.closest('.lg-row').remove(); });
+    body.querySelector('#lg-save').onclick=()=>{
+      const rows=sel=>[...body.querySelectorAll(sel)];
+      const val=(row,f)=>row.querySelector(`[data-f="${f}"]`)?.value??'';
+      const chk=(row,f)=>row.querySelector(`[data-f="${f}"]`)?.checked;
+      const patch={
+        params:rows('#lg-params .lg-row').map(r=>({name:val(r,'name').trim(),label:val(r,'label'),type:val(r,'type'),
+          required:chk(r,'required'),enumValues:val(r,'type')==='enum'?val(r,'enumValues').split(',').map(s=>s.trim()).filter(Boolean):null})),
+        rules:rows('#lg-rules .lg-row').map(r=>({target:val(r,'target').trim(),field:val(r,'field').trim(),op:val(r,'op'),value:val(r,'value'),message:val(r,'message')})),
+        submissionCriteria:{requireConfirm:body.querySelector('#lg-confirm').checked,note:body.querySelector('#lg-note').value},
+        edits:rows('#lg-edits .lg-row').map(r=>{ const e={op:val(r,'op'),target:val(r,'target').trim()};
+          if(val(r,'field')) e.field=val(r,'field').trim();
+          if(val(r,'value')) e.value=val(r,'value');
+          if(val(r,'objectType')) e.objectType=val(r,'objectType').trim();
+          if(val(r,'props')){ try{ e.props=JSON.parse(val(r,'props')); }catch(x){ return {_bad:'props JSON 错误'}; } }
+          if(val(r,'linkType')) e.linkType=val(r,'linkType').trim();
+          if(val(r,'from')) e.from=val(r,'from').trim();
+          if(val(r,'to')) e.to=val(r,'to').trim();
+          return e; }),
+        sideEffects:rows('#lg-effects .lg-row').map(r=>({type:val(r,'type'),
+          config:val(r,'type')==='notify'?{to:val(r,'to'),text:val(r,'text')}:{url:val(r,'url')}}))
+      };
+      if(patch.edits.some(e=>e._bad)){ body.querySelector('#lg-err').textContent='存在 props JSON 格式错误'; return; }
+      const r=CORE.updateActionType(state,a.id,patch);
+      r.ok?(APP.store.save(),APP.render(),APP.toast('Logic 已保存')):body.querySelector('#lg-err').textContent=r.error;
+    };
+  }
+  if(tab==='obs'){
+    const days=CORE.usageByDay(state,a.id,30);
+    const max=Math.max(1,...days.map(d=>d.count));
+    const audit=CORE.auditFor(state,{actionId:a.id}).slice(-10).reverse();
+    body.innerHTML=`<div class="card"><h3>近 30 天调用量</h3>
+      <div style="display:flex;align-items:flex-end;gap:2px;height:80px">
+      ${days.map(d=>`<div title="${d.day}: ${d.count}" style="flex:1;background:${d.count?'var(--pri)':'#e2e8f0'};height:${Math.max(4,d.count/max*76)}px;border-radius:2px"></div>`).join('')}</div>
+      <div class="mut" style="display:flex;justify-content:space-between"><span>${days[0].day}</span><span>${days[29].day}</span></div></div>
+    <div class="card"><h3>最近执行(≤10)</h3>
+      ${audit.map(e=>`<div style="border-bottom:1px solid var(--line);padding:8px 0">
+        <span class="mut mono">${e.ts.replace('T',' ').slice(0,19)}</span> · ${APP.esc(e.actor||'本地用户')} · ${APP.esc(e.summary)}
+        <div class="mut mono" style="font-size:11px">${e.diff.map(APP.esc).join('<br>')}</div></div>`).join('')||'<span class="mut">尚无执行记录</span>'}</div>`;
+  }
+};
+
+// ── 运行动作弹窗 ──
+APP.openRunAction=(actionId,prefill)=>{
+  const state=APP.state, sch=CORE.schemaOf(state);
+  const a=sch.actionTypes.find(x=>x.id===actionId);
+  if(!a) return APP.toast('动作不存在','error');
+  const E=APP.esc;
+  const targetFields=a.targets.map(t=>{
+    const cands=CORE.objectsOfType(state,t.type);
+    return `<div class="form-row"><label>目标 ${t.role} : ${t.type}</label>
+      <select data-tg="${t.role}">${cands.map(o=>`<option value="${o.__id}" ${prefill&&prefill[t.role]===o.__id?'selected':''}>${E(CORE.objectLabel(state,o))}(${o.__id})</option>`).join('')}</select></div>`;
+  }).join('');
+  const paramFields=a.params.map(p=>`<div class="form-row"><label>${E(p.label||p.name)}${p.required?' *':''}</label>
+    ${p.type==='enum'
+      ?`<select data-pr="${p.name}">${(p.enumValues||[]).map(v=>`<option>${E(v)}</option>`).join('')}</select>`
+      :`<input data-pr="${p.name}" type="${p.type==='number'?'number':p.type==='date'?'date':p.type==='boolean'?'checkbox':'text'}">`}
+  </div>`).join('');
+  const collect=root=>{
+    const params={},targets={};
+    root.querySelectorAll('[data-tg]').forEach(s=>targets[s.dataset.tg]=s.value);
+    root.querySelectorAll('[data-pr]').forEach(s=>params[s.dataset.pr]=s.type==='checkbox'?s.checked:s.value);
+    return {params,targets};
+  };
+  const closeRun=APP.modal({title:`▶ ${E(a.label||a.name)}`,bodyHTML:`${targetFields}${paramFields}<div class="form-err" id="ra-err"></div>`,actions:[
+    {label:'取消'},{label:'执行',kind:'primary',onClick:root=>{
+      const {params,targets}=collect(root);
+      const r=CORE.runAction(state,a.id,{params,targets,actor:'本地用户'});
+      if(r.ok){ APP.store.save(); APP.render(); APP.toast('执行成功'); return; }
+      if(r.needConfirm){
+        APP.modal({title:'确认执行',bodyHTML:`${a.submissionCriteria?.note?`<p>${E(a.submissionCriteria.note)}</p>`:''}
+          <div class="card"><b>将产生以下变更:</b><div class="mono" style="font-size:12px">${r.preview.map(E).join('<br>')}</div></div>`,actions:[
+          {label:'再想想'},{label:'确认执行',kind:'primary',onClick:()=>{
+            const r2=CORE.runAction(state,a.id,{params,targets,actor:'本地用户',confirmed:true});
+            if(r2.ok){ APP.store.save(); APP.render(); APP.toast('执行成功'); closeRun(); }
+            else APP.toast(r2.error,'error');
+          }}]});
+        return false; // 保留底层表单(确认框叠在上面,关闭后仍在)
+      }
+      root.querySelector('#ra-err').textContent=r.error; return false;
+    }}]});
+};
+
+// ── 通知中心 ──
+document.addEventListener('DOMContentLoaded',()=>{
+  document.querySelector('#btn-notify').addEventListener('click',()=>{
+    const state=APP.state;
+    const list=[...state.notices].reverse();
+    APP.modal({title:'🔔 通知中心',bodyHTML:
+      list.map(n=>`<div style="border-bottom:1px solid var(--line);padding:8px 0;${n.read?'opacity:.55':''}">
+        <span class="mut mono">${n.ts.replace('T',' ').slice(0,19)}</span> → <b>${APP.esc(n.to)}</b><br>${APP.esc(n.text)}</div>`).join('')
+      ||'<p class="mut">暂无通知</p>',actions:[
+      {label:'全部已读',onClick:()=>{ CORE.markNoticesRead(state); APP.store.save(); APP.render(); }},
+      {label:'关闭'}]});
+  });
+});
+
+APP.VIEWS._newActionType=()=>{
+  APP.modal({title:'新建动作类型',bodyHTML:`
+    <div class="form-row"><label>名称(小写 snake)</label><input id="na-name"></div>
+    <div class="form-row"><label>Label</label><input id="na-label"></div>
+    <div class="form-err" id="na-err"></div>`,actions:[
+    {label:'取消'},{label:'创建',kind:'primary',onClick:root=>{
+      const r=CORE.addActionType(APP.state,{name:root.querySelector('#na-name').value.trim(),
+        label:root.querySelector('#na-label').value,targets:[],params:[],rules:[],
+        submissionCriteria:{requireConfirm:false},edits:[],sideEffects:[]});
+      if(!r.ok){ root.querySelector('#na-err').textContent=r.error; return false; }
+      APP.store.save(); APP.go('actionType',r.id); APP.toast('动作已创建,请在 Logic 页配置');
     }}]});
 };
 </script>

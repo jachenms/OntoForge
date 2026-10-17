@@ -385,5 +385,14 @@ T('S14.2 APP 基础件', ()=>{
   ok(app.includes('VIEWS'),'视图注册表');
 });
 
+// ── S11 ActionType/运行弹窗/通知 静态断言 ──
+T('S11.1 视图挂载', ()=>{
+  const app=section('appjs');
+  for(const v of ['VIEWS.actionType','openRunAction','_newActionType','Observability','Logic'])
+    ok(app.includes(v),'缺 '+v);
+  ok(app.includes('needConfirm'),'确认流');
+  ok(app.includes('usageByDay'),'用量柱状数据源');
+});
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail?1:0);

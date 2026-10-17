@@ -71,5 +71,34 @@ T('S1.4 共享属性挂载', ()=>{
   ok(!CORE.deleteSharedProp(s,'sp_none').ok,'不存在应拒绝');
 });
 
+// ── S2 链接类型/链接实例 ──
+function _twoTypes(){ const s=CORE.createEmptyState();
+  const a=CORE.addObjectType(s,{name:'team'}).id, b=CORE.addObjectType(s,{name:'incident'}).id;
+  s.data.objects.push({__id:'t1',__type:'team',props:{}},{__id:'t2',__type:'team',props:{}},{__id:'i1',__type:'incident',props:{}});
+  return s; }
+T('S2.1 建链接类型+端点校验', ()=>{
+  const s=_twoTypes();
+  ok(!CORE.addLinkType(s,{name:'x',from:'team',to:'ghost',cardinality:'M:N'}).ok,'端点不存在应拒绝');
+  ok(!CORE.addLinkType(s,{name:'x',from:'team',to:'incident',cardinality:'9:9'}).ok,'非法基数应拒绝');
+  ok(CORE.addLinkType(s,{name:'assigned',label:'派遣',from:'team',to:'incident',cardinality:'M:N',keyMapping:{fromKey:'team_id',toKey:'inc_id'}}).ok,'合法通过');
+});
+T('S2.2 链接实例:类型匹配/去重/基数', ()=>{
+  const s=_twoTypes();
+  const lt=CORE.addLinkType(s,{name:'assigned',from:'team',to:'incident',cardinality:'M:N'}).id;
+  ok(!CORE.createLink(s,lt,'i1','t1').ok,'端点方向错应拒绝');
+  ok(CORE.createLink(s,lt,'t1','i1').ok,'正向通过');
+  ok(!CORE.createLink(s,lt,'t1','i1').ok,'重复对拒绝');
+  ok(CORE.createLink(s,lt,'t2','i1').ok,'M:N 多方允许');
+  ok(!CORE.deleteLinkType(s,lt).ok,'有实例时删 linkType 拒绝');
+});
+T('S2.3 N:1 唯一性', ()=>{
+  const s=_twoTypes();
+  const lt=CORE.addLinkType(s,{name:'on',from:'incident',to:'team',cardinality:'N:1'}).id;
+  ok(CORE.createLink(s,lt,'i1','t1').ok,'首条通过');
+  ok(!CORE.createLink(s,lt,'i1','t2').ok,'N:1 from 侧重复拒绝');
+  ok(CORE.deleteLink(s,CORE.linksOf(s,lt)[0].__id).ok,'删链接');
+  ok(CORE.createLink(s,lt,'i1','t2').ok,'删后可重建');
+});
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail?1:0);

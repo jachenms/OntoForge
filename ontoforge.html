@@ -897,6 +897,152 @@ APP.VIEWS._newObjectType=()=>{
       APP.store.save(); APP.go('objectType',r.id); APP.toast('类型已创建');
     }}]});
 };
+
+// ── Schema 关系图(canvas)──
+APP.renderLinkGraph=(slot,state,focusTypeId)=>{
+  const sch=CORE.schemaOf(state);
+  const types=sch.objectTypes;
+  if(!types.length){ slot.innerHTML='<span class="mut">尚无对象类型</span>'; return; }
+  const W=Math.max(slot.clientWidth||520,420), col=Math.ceil(Math.sqrt(types.length));
+  const rows=Math.ceil(types.length/col), cellW=W/col, cellH=110, H=rows*cellH+20;
+  const pos={}; types.forEach((t,i)=>{ pos[t.name]={x:(i%col)*cellW+cellW/2, y:Math.floor(i/col)*cellH+cellH/2+10}; });
+  const cv=document.createElement('canvas'); cv.width=W; cv.height=H; cv.style.width='100%';
+  slot.innerHTML=''; slot.appendChild(cv);
+  const ctx=cv.getContext('2d');
+  ctx.font='12px sans-serif';
+  // 边
+  sch.linkTypes.forEach(lt=>{
+    const a=pos[lt.from], b=pos[lt.to]; if(!a||!b) return;
+    ctx.strokeStyle='#94a3b8'; ctx.lineWidth=1.5;
+    ctx.beginPath(); ctx.moveTo(a.x,a.y); ctx.lineTo(b.x,b.y); ctx.stroke();
+    const mx=(a.x+b.x)/2, my=(a.y+b.y)/2;
+    ctx.fillStyle='#475569';
+    const tag=`${lt.label||lt.name} ${lt.cardinality}`;
+    ctx.fillText(tag,mx-ctx.measureText(tag).width/2,my-6);
+  });
+  // 节点
+  types.forEach(t=>{
+    const p=pos[t.name], w=110,h=44, x=p.x-w/2, y=p.y-h/2;
+    ctx.fillStyle=t.id===focusTypeId?'#dbeafe':'#ffffff';
+    ctx.strokeStyle=t.color||'#cbd5e1'; ctx.lineWidth=t.id===focusTypeId?2.5:1.5;
+    ctx.beginPath(); ctx.roundRect(x,y,w,h,8); ctx.fill(); ctx.stroke();
+    ctx.fillStyle='#0f172a'; ctx.textAlign='center';
+    ctx.fillText(`${t.icon||''} ${(t.label||t.name).slice(0,8)}`,p.x,p.y+4); ctx.textAlign='start';
+  });
+  cv.onclick=e=>{
+    const r=cv.getBoundingClientRect(), sx=cv.width/r.width;
+    const cx=(e.clientX-r.left)*sx, cy=(e.clientY-r.top)*sx;
+    for(const t of types){ const p=pos[t.name];
+      if(Math.abs(cx-p.x)<55&&Math.abs(cy-p.y)<22){ APP.go('objectType',t.id); return; } }
+  };
+};
+
+// ── LinkType 列表 ──
+APP.VIEWS.linkTypes=(el,state)=>{
+  const sch=CORE.schemaOf(state);
+  el.innerHTML=`<h2>链接类型 <button class="btn btn-primary" id="lt-new" style="float:right">＋ 新建链接类型</button></h2>
+  ${sch.linkTypes.map(lt=>{
+    const n=state.data.links.filter(l=>l.__type===lt.id).length;
+    return `<div class="card" data-id="${lt.id}" style="cursor:pointer">
+      <b>🔗 ${APP.esc(lt.label||lt.name)}</b> <span class="badge">${lt.cardinality}</span>
+      <div class="mut mono">${lt.from} → ${lt.to} · ${n} 条实例</div></div>`;
+  }).join('')||'<p class="mut">暂无链接类型</p>'}`;
+  el.querySelector('#lt-new').onclick=()=>APP.VIEWS._newLinkType();
+  el.querySelectorAll('[data-id]').forEach(c=>c.onclick=()=>APP.go('linkType',c.dataset.id));
+};
+
+// ── LinkType 详情 ──
+APP.VIEWS.linkType=(el,state)=>{
+  const sch=CORE.schemaOf(state);
+  const lt=sch.linkTypes.find(x=>x.id===state.ui.sel);
+  if(!lt){ el.innerHTML='<p class="mut">链接类型不存在</p>'; return; }
+  const n=state.data.links.filter(l=>l.__type===lt.id).length;
+  const names=sch.objectTypes.map(t=>t.name);
+  el.innerHTML=`<h2>🔗 ${APP.esc(lt.label||lt.name)}</h2>
+  <div class="card"><h3>Overview</h3>
+    <div class="grid2">
+      <div class="form-row"><label>Label</label><input id="lt-label" value="${APP.esc(lt.label||'')}"></div>
+      <div class="form-row"><label>基数</label><select id="lt-card">${CORE.CARDINALITIES.map(c=>`<option ${c===lt.cardinality?'selected':''}>${c}</option>`).join('')}</select></div>
+      <div class="form-row"><label>From(源类型)</label><select id="lt-from">${names.map(x=>`<option ${x===lt.from?'selected':''}>${x}</option>`).join('')}</select></div>
+      <div class="form-row"><label>To(目标类型)</label><select id="lt-to">${names.map(x=>`<option ${x===lt.to?'selected':''}>${x}</option>`).join('')}</select></div>
+    </div>
+    <button class="btn btn-primary" id="lt-save">保存</button>
+    <button class="btn btn-danger" id="lt-del" style="margin-left:8px">删除</button>
+    <div class="mut" style="margin-top:8px">实例 ${n} 条 · 修改端点后既有实例不受影响,新增按新约束校验</div>
+  </div>
+  <div class="card"><h3>Datasources(外键映射)</h3>
+    <div class="grid2">
+      <div class="form-row"><label>源端键(fromKey)</label><input id="lt-fk" value="${APP.esc(lt.keyMapping?.fromKey||'')}"></div>
+      <div class="form-row"><label>目标端键(toKey)</label><input id="lt-tk" value="${APP.esc(lt.keyMapping?.toKey||'')}"></div>
+    </div>
+    <button class="btn" id="lt-km-save">保存映射</button>
+  </div>`;
+  el.querySelector('#lt-save').onclick=()=>{
+    const r=CORE.updateLinkType(state,lt.id,{label:el.querySelector('#lt-label').value,
+      cardinality:el.querySelector('#lt-card').value,from:el.querySelector('#lt-from').value,to:el.querySelector('#lt-to').value});
+    r.ok?(APP.store.save(),APP.render(),APP.toast('已保存')):APP.toast(r.error,'error');
+  };
+  el.querySelector('#lt-km-save').onclick=()=>{
+    const r=CORE.updateLinkType(state,lt.id,{keyMapping:{fromKey:el.querySelector('#lt-fk').value,toKey:el.querySelector('#lt-tk').value}});
+    r.ok?(APP.store.save(),APP.toast('已保存')):APP.toast(r.error,'error');
+  };
+  el.querySelector('#lt-del').onclick=()=>{
+    const r=CORE.deleteLinkType(state,lt.id);
+    r.ok?(APP.store.save(),APP.go('linkTypes'),APP.toast('已删除')):APP.toast(r.error,'error');
+  };
+};
+
+APP.VIEWS._newLinkType=()=>{
+  const sch=CORE.schemaOf(APP.state);
+  const names=sch.objectTypes.map(t=>t.name);
+  if(names.length<1){ APP.toast('请先创建对象类型','error'); return; }
+  APP.modal({title:'新建链接类型',bodyHTML:`
+    <div class="form-row"><label>名称(小写 snake)</label><input id="nl-name"></div>
+    <div class="form-row"><label>Label</label><input id="nl-label"></div>
+    <div class="grid2">
+      <div class="form-row"><label>From</label><select id="nl-from">${names.map(n=>`<option>${n}</option>`).join('')}</select></div>
+      <div class="form-row"><label>To</label><select id="nl-to">${names.map(n=>`<option>${n}</option>`).join('')}</select></div>
+    </div>
+    <div class="form-row"><label>基数</label><select id="nl-card">${CORE.CARDINALITIES.map(c=>`<option>${c}</option>`).join('')}</select></div>
+    <div class="form-err" id="nl-err"></div>`,actions:[
+    {label:'取消'},{label:'创建',kind:'primary',onClick:root=>{
+      const r=CORE.addLinkType(APP.state,{name:root.querySelector('#nl-name').value.trim(),
+        label:root.querySelector('#nl-label').value,from:root.querySelector('#nl-from').value,
+        to:root.querySelector('#nl-to').value,cardinality:root.querySelector('#nl-card').value});
+      if(!r.ok){ root.querySelector('#nl-err').textContent=r.error; return false; }
+      APP.store.save(); APP.go('linkType',r.id); APP.toast('链接类型已创建');
+    }}]});
+};
+
+// ── 共享属性 ──
+APP.VIEWS.sharedProps=(el,state)=>{
+  const sch=CORE.schemaOf(state);
+  el.innerHTML=`<h2>共享属性 <button class="btn btn-primary" id="sp-new" style="float:right">＋ 新建共享属性</button></h2>
+  ${(sch.sharedProps||[]).map(sp=>{
+    const used=sch.objectTypes.filter(t=>(t.sharedPropRefs||[]).includes(sp.id));
+    return `<div class="card"><b>🧩 ${APP.esc(sp.label||sp.name)}</b> <span class="badge">${sp.baseType}</span>
+      <button class="btn btn-danger" data-del="${sp.id}" style="float:right" ${used.length?'disabled title="被引用中"':''}>删除</button>
+      <div class="mut mono">${sp.name} · 挂载于:${used.map(t=>APP.esc(t.label||t.name)).join('、')||'无'}</div></div>`;
+  }).join('')||'<p class="mut">暂无共享属性</p>'}`;
+  el.querySelector('#sp-new').onclick=()=>APP.VIEWS._newSharedProp();
+  el.querySelectorAll('[data-del]').forEach(b=>b.onclick=()=>{
+    const r=CORE.deleteSharedProp(state,b.dataset.del);
+    r.ok?(APP.store.save(),APP.render(),APP.toast('已删除')):APP.toast(r.error,'error');
+  });
+};
+APP.VIEWS._newSharedProp=()=>{
+  APP.modal({title:'新建共享属性',bodyHTML:`
+    <div class="form-row"><label>名称(小写 snake)</label><input id="ns-name"></div>
+    <div class="form-row"><label>Label</label><input id="ns-label"></div>
+    <div class="form-row"><label>基础类型</label><select id="ns-bt">${CORE.BASE_TYPES.map(b=>`<option>${b}</option>`).join('')}</select></div>
+    <div class="form-err" id="ns-err"></div>`,actions:[
+    {label:'取消'},{label:'创建',kind:'primary',onClick:root=>{
+      const r=CORE.addSharedProp(APP.state,{name:root.querySelector('#ns-name').value.trim(),
+        label:root.querySelector('#ns-label').value,baseType:root.querySelector('#ns-bt').value});
+      if(!r.ok){ root.querySelector('#ns-err').textContent=r.error; return false; }
+      APP.store.save(); APP.render(); APP.toast('共享属性已创建');
+    }}]});
+};
 </script>
 </body>
 </html>

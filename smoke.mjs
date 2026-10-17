@@ -364,6 +364,14 @@ T('S9.2 7-section 覆盖', ()=>{
     ok(app.includes(kw),'7-section 缺 '+kw);
 });
 
+// ── S10 LinkType/关系图/共享属性 静态断言 ──
+T('S10.1 视图挂载', ()=>{
+  const app=section('appjs');
+  for(const v of ['VIEWS.linkTypes','VIEWS.linkType','VIEWS.sharedProps','renderLinkGraph','_newLinkType','_newSharedProp'])
+    ok(app.includes(v),'缺 '+v);
+  ok(app.includes('<canvas')||app.includes("createElement('canvas')")||app.includes('getContext'),'canvas 绘制');
+});
+
 // ── S14 UI 骨架静态断言 ──
 T('S14.1 DOM 骨架存在', ()=>{
   for(const id of ['topbar','sidebar','main','toasts','modal-root','global-search','branch-switch','btn-notify','notify-badge','btn-new'])

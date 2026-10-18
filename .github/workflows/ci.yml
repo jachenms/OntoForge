@@ -1,0 +1,36 @@
+name: CI
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Smoke tests (CORE, 39 assertions)
+        run: node smoke.mjs
+
+      - name: Install Playwright
+        run: npm install --no-save playwright@1.62.1
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: E2E tests (21 assertions)
+        run: node verify_ui.mjs
+
+      - name: Trademark red line
+        run: |
+          count=$(grep -ci palantir ontoforge.html || true)
+          if [ "$count" != "0" ]; then
+            echo "forbidden word found in ontoforge.html ($count hits)"
+            exit 1
+          fi

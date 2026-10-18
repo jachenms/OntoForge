@@ -1,11 +1,16 @@
 // OntoForge 无头 E2E:file:// 直开,验证核心交互路径(含终检清单的 headless 等价路径)
-// 用法: NODE_PATH=$HOME/.hermes/hermes-agent/node_modules node verify_ui.mjs
-// 注1:ESM bare import 不读 NODE_PATH,故用 createRequire(CJS 解析读 NODE_PATH)加载 playwright
-// 注2:NODE_PATH 须指向与 ~/.cache/ms-playwright(chromium-1234)配对的 playwright(1.62.x)
+// 用法: npm run test:e2e(本地装过 playwright);或 NODE_PATH=$HOME/.hermes/hermes-agent/node_modules node verify_ui.mjs
+// 注1:ESM bare import 不读 NODE_PATH,故用 createRequire(CJS 解析)加载 playwright
+// 注2:解析顺序 —— 本仓库 node_modules(CI/他人机器)→ NODE_PATH → ~/.hermes(本机缓存 chromium-1234 配对的 1.62.x)
 import { createRequire } from 'module';
 import { readFileSync } from 'fs';
 const require = createRequire(import.meta.url);
-const { chromium } = require('playwright');
+let chromium;
+try {
+  ({ chromium } = require('playwright'));
+} catch {
+  ({ chromium } = require(process.env.HOME + '/.hermes/hermes-agent/node_modules/playwright'));
+}
 
 const fileUrl = 'file://' + new URL('./ontoforge.html', import.meta.url).pathname;
 let pass = 0, fail = 0;

@@ -1,0 +1,21 @@
+{
+  "name": "ontoforge",
+  "version": "1.0.0",
+  "description": "Single-file ontology workbench prototype (Foundry-style ontology manager concept). Zero build, zero runtime dependencies.",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node smoke.mjs",
+    "test:e2e": "node verify_ui.mjs"
+  },
+  "keywords": [
+    "ontology",
+    "prototype",
+    "single-file",
+    "no-build"
+  ],
+  "license": "MIT",
+  "devDependencies": {
+    "playwright": "^1.62.1"
+  }
+}

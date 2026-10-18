@@ -51,7 +51,17 @@ npx playwright install chromium
 npm run test:e2e
 ```
 
-CI (`.github/workflows/ci.yml`) runs both suites plus a trademark red-line check on every push.
+### Python package
+
+The CORE + SEED domain engine is also available as a typed, zero-dependency Python package under [`python/`](python/) — same state contract, same error messages, importable from your own backend or notebook:
+
+```bash
+cd python
+pip install -e ".[dev]"
+pytest                 # 29 tests mirroring smoke.mjs S0–S7
+```
+
+CI (`.github/workflows/ci.yml`) runs all three suites plus a trademark red-line check on every push.
 
 ## Project layout
 
@@ -59,6 +69,7 @@ CI (`.github/workflows/ci.yml`) runs both suites plus a trademark red-line check
 ontoforge.html       the entire application
 smoke.mjs            CORE smoke tests (39 assertions)
 verify_ui.mjs        Playwright E2E (21 assertions)
+python/              Python port of the CORE+SEED domain engine (src layout, pytest)
 docs/
   research/          reverse-engineering notes on Foundry's ontology model
   superpowers/       design specs and implementation plans

@@ -34,3 +34,18 @@ jobs:
             echo "forbidden word found in ontoforge.html ($count hits)"
             exit 1
           fi
+
+  python:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install package
+        run: pip install -e "./python[dev]"
+
+      - name: Pytest (29 tests mirroring smoke S0–S7)
+        run: pytest python

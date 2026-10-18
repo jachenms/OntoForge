@@ -3,13 +3,13 @@
 Python port of the OntoForge **CORE + SEED** engine from `ontoforge.html` — the full domain layer with no UI and zero dependencies.
 
 - **Same contract as the JS CORE**: every function takes the JSON-compatible `state` dict first and returns `{"ok": True, ...}` / `{"ok": False, "error": ...}`; error messages are identical (Chinese, matching the prototype's UI copy).
-- **Modules**: `state` (serialization/validation) · `schema` (object types, properties, shared props) · `links` · `actions` (action types, template rendering, the `run_action` engine) · `queries` (search/audit/usage) · `branches` (branch isolation, schema diff, merge proposals) · `seed` (the traffic-emergency sample dataset).
+- **Modules**: `state` (serialization/validation) · `schema` (object types, properties, shared props) · `links` · `actions` (action types, template rendering, the `run_action` engine) · `queries` (search/audit/usage) · `branches` (branch isolation, schema diff, merge proposals) · `seed` (the traffic-emergency sample dataset) · `pipeline` (datasets → declarative mapping → atomic materialization + lineage) · `ai` (Logic Function registry — protocol skeleton for a future agent layer).
 
 ## Install & test
 
 ```bash
 pip install -e ".[dev]"   # from this directory
-pytest                    # 29 tests mirroring smoke.mjs S0–S7
+pytest                    # 46 tests: engine + pipeline + AI skeleton
 ```
 
 ## Usage

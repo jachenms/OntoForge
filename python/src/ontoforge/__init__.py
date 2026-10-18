@@ -16,9 +16,12 @@ from .queries import (audit_for, linked_objects, mark_notices_read, object_label
                       objects_of_type, search_objects, unread_notices, usage_by_day)
 from .branches import (create_branch, diff_empty, diff_schemas, merge_proposal, propose_merge,
                        reject_proposal, switch_branch)
+from .pipeline import (delete_dataset, list_datasets, pipeline_runs, register_dataset,
+                       run_pipeline)
+from .ai import invoke_logic, list_logic, register_logic
 from . import seed
 
-__version__ = "1.0.0"
+__version__ = "1.1.0"
 
 __all__ = [
     "BASE_TYPES", "CARDINALITIES", "EDIT_OPS", "RULE_OPS", "clone", "uid",
@@ -33,5 +36,7 @@ __all__ = [
     "objects_of_type", "search_objects", "unread_notices", "usage_by_day",
     "create_branch", "diff_empty", "diff_schemas", "merge_proposal", "propose_merge",
     "reject_proposal", "switch_branch",
+    "delete_dataset", "list_datasets", "pipeline_runs", "register_dataset", "run_pipeline",
+    "invoke_logic", "list_logic", "register_logic",
     "seed",
 ]

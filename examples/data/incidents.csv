@@ -1,0 +1,4 @@
+inc_id,title,inc_type,severity,seg_id
+INC-2001,三车连环追尾,事故,较大,SEG-001
+INC-2002,新能源车亏电占道,故障车,一般,SEG-006
+INC-2003,暴雨积水,恶劣天气,重大,SEG-007

@@ -2,6 +2,7 @@
 
 ## 使用与架构
 
+- [gap-assessment-foundry-aip.md](gap-assessment-foundry-aip.md) — 对照代码的 Foundry / AIP 差距评估与接下来 2–3 个 PR 的优先级(2026-11-08)
 - [architecture.md](architecture.md) — 三平面(Builder / Pipeline / AI)与 state 契约、红线
 - [pipeline.md](pipeline.md) — pipeline 映射规范参考手册(dataset / mapping / transform / 血缘)
 - [roadmap.md](roadmap.md) — 分层路线图与"明确不做"清单
@@ -27,3 +28,4 @@ Foundry 本体模型的逆向工程笔记——OntoForge 的概念来源与设�
 - [plans/2026-10-17-ontoforge.md](superpowers/plans/2026-10-17-ontoforge.md) — 实施计划
 - [specs/2026-10-18-github-release-design.md](superpowers/specs/2026-10-18-github-release-design.md) — GitHub 发布包设计
 - [specs/2026-10-18-pipeline-repositioning-design.md](superpowers/specs/2026-10-18-pipeline-repositioning-design.md) — 重定位 + pipeline 引擎 v1 设计
+- [specs/2026-10-24-server-architecture-design.md](superpowers/specs/2026-10-24-server-architecture-design.md) — 服务端架构设计稿(已确认,尚未实现;不是现状)

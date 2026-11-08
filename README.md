@@ -33,11 +33,13 @@ Enterprise data only becomes operational when it is bound to a **semantic model 
 | Foundry concept | OntoForge counterpart | Status |
 |---|---|---|
 | Ontology Manager | `ontoforge.html` workbench + `ontoforge` Python engine | ✅ shipped |
-| Actions (write-back, governance) | `run_action` engine: params → rules → confirm → atomic edits → audit | ✅ shipped |
+| Actions (guarded edits, audit) | `run_action`: params → rules → confirm → atomic edits → in-app notify | ✅ shipped |
 | Branch / proposal workflow | schema branches, diff, merge proposals | ✅ shipped |
 | Pipeline Builder (batch) | `ontoforge.pipeline`: declarative mapping, validation, upsert, lineage | ✅ shipped |
 | AI Logic / Agents (AIP) | `ontoforge.ai` Logic Function registry (protocol skeleton, no LLM calls) | 🔩 skeleton |
 | Workshop apps, streaming, scheduling | — | 🧭 [roadmap](docs/roadmap.md) |
+
+差距与下一步优先级(按当前代码核对,不是功能菜单):[docs/gap-assessment-foundry-aip.md](docs/gap-assessment-foundry-aip.md)。
 
 ## Quick start
 
@@ -59,8 +61,11 @@ cd python && pip install -e ".[dev]"   # or: PYTHONPATH=src python3
 import ontoforge as of
 
 state = of.seed.traffic()
-r = of.run_action(state, "dispatch_team",
-                  {"team": team_id, "inc": inc_id}, {}, confirmed=True)
+dispatch = next(a for a in of.schema_of(state)["actionTypes"] if a["name"] == "dispatch_team")
+team_id = next(t["__id"] for t in of.objects_of_type(state, "rescue_team") if t["props"]["status"] == "待命")
+inc_id = next(i["__id"] for i in of.objects_of_type(state, "incident") if i["props"]["status"] == "待处置")
+r = of.run_action(state, dispatch["id"],
+                  {"params": {}, "targets": {"team": team_id, "inc": inc_id}, "confirmed": True})
 ```
 
 ### 3. The pipeline (end to end)
@@ -105,6 +110,7 @@ examples/            end-to-end pipeline example with sample CSV data
 docs/
   architecture.md    the three planes and the state contract
   pipeline.md        pipeline mapping reference
+  gap-assessment-foundry-aip.md  Foundry / AIP gap assessment
   guides/            industry walkthroughs
   roadmap.md         what comes next (and what deliberately doesn't)
   research/          reverse-engineering notes behind the concept

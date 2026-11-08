@@ -31,5 +31,5 @@
 
 ## 明确不做
 
-- 不引入运行时依赖;不绑定任何特定 LLM 供应商
-- 不做多租户/权限体系(单文件原型的边界;有需求的企业可自行在其外层包)
+- 核心引擎不引入运行时依赖,也不绑定任何特定 LLM 供应商。可选的服务端 extra 若落地,依赖只放在 extra 里(见 [服务端设计稿](superpowers/specs/2026-10-24-server-architecture-design.md));该包目前没有代码。差距与建议顺序见 [gap-assessment-foundry-aip.md](gap-assessment-foundry-aip.md)。
+- 不做多租户,也不做角色/对象级权限(单文件原型的边界;有需求的企业可自行在其外层包)。设计稿里的可选 Bearer token 只是部署口令,不是权限体系。
